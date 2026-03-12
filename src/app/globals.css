@@ -1,0 +1,81 @@
+@import "../../frontend/styles/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 20% 98%;
+  --foreground: 222.2 47.4% 11.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 47.4% 11.2%;
+  --primary: 205 78% 44%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 94%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 94%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 171 71% 44%;
+  --accent-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 205 78% 44%;
+  --radius: 0.85rem;
+}
+
+.dark {
+  --background: 222 47% 7%;
+  --foreground: 210 40% 98%;
+  --card: 222 40% 11%;
+  --card-foreground: 210 40% 98%;
+  --primary: 197 93% 61%;
+  --primary-foreground: 222 47% 7%;
+  --secondary: 217 32% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217 32% 17%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 166 66% 51%;
+  --accent-foreground: 222 47% 7%;
+  --border: 217 32% 17%;
+  --input: 217 32% 17%;
+  --ring: 197 93% 61%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  background-image: radial-gradient(circle at 20% 0%, hsl(var(--primary) / 0.08), transparent 40%), radial-gradient(circle at 80% 0%, hsl(var(--accent) / 0.08), transparent 35%);
+}
+
+/* Safety: interactive controls should always feel clickable */
+button:not(:disabled),
+a[href],
+[role="button"],
+[role="tab"],
+.clickable,
+.nav-link,
+.tab-link {
+  cursor: pointer !important;
+}
+
+/* Text cursor should be limited to editable fields */
+input,
+textarea,
+select,
+[contenteditable="true"],
+[role="textbox"] {
+  cursor: text !important;
+}
+
+.glass {
+  background: linear-gradient(145deg, hsl(var(--card) / 0.86), hsl(var(--card) / 0.72));
+  backdrop-filter: blur(10px);
+}
+
+.shimmer {
+  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted) / 0.45) 50%, hsl(var(--muted)) 75%);
+  background-size: 200% 100%;
+}

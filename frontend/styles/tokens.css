@@ -1,0 +1,5 @@
+/* Enterprise design tokens for future theming expansion */
+:root {
+  --pf-shadow-elevated: 0 18px 40px rgba(9, 15, 24, 0.12);
+  --pf-radius-xl: 16px;
+}

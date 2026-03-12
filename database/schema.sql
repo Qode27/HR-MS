@@ -1,0 +1,3 @@
+-- Canonical SQL entrypoint for database teams.
+-- Prisma is source-of-truth for app migrations.
+-- Use `prisma/migrations/*/migration.sql` for executable DDL.
