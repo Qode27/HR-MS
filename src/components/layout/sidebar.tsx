@@ -14,6 +14,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { data, loading } = useApi<MeResponse>("/api/auth/me", []);
   const role = data?.role || "EMPLOYEE";
+  const currentPath = pathname ?? "";
   const visibleNav = navItems.filter((item) => {
     if (!item.permission) return true;
     if (Array.isArray(item.permission)) return item.permission.some((perm) => hasPermission(role, perm));
@@ -40,7 +41,7 @@ export function Sidebar() {
           <p className="px-2 text-xs text-muted-foreground">No menu items available for this role.</p>
         ) : visibleNav.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = currentPath === item.href || currentPath.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
