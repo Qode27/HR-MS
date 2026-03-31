@@ -5,17 +5,18 @@ import { success } from "@backend/utils/api-response";
 import { AttendanceService } from "@backend/services/attendance.service";
 import { AppError } from "@backend/utils/errors";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 const service = new AttendanceService();
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const session = await requirePermission(req, "attendance:manage");
+  const { id } = await params;
   const payload = await req.json();
   const decision = payload?.decision;
   if (decision !== "APPROVED" && decision !== "REJECTED") throw new AppError("Invalid decision", 422);
 
   const updated = await service.decideRegularization({
-    attendanceId: params.id,
+    attendanceId: id,
     decision,
     decisionBy: session.sub,
     note: payload?.note

@@ -1,7 +1,8 @@
+import type { Route } from "next";
 import { LayoutDashboard, Users, CalendarClock, CalendarDays, Wallet, BriefcaseBusiness, UserRoundPlus, FileText, BarChart3, Settings, UserCircle2, Target } from "lucide-react";
 
 export type NavItem = {
-  href: string;
+  href: Route;
   label: string;
   icon: typeof LayoutDashboard;
   permission?: string | string[];

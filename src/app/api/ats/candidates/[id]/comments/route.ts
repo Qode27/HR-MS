@@ -5,16 +5,17 @@ import { requirePermission } from "@backend/middleware/auth-guard";
 import { success } from "@backend/utils/api-response";
 import { AppError } from "@backend/utils/errors";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const session = await requirePermission(req, "ats:manage");
+  const { id } = await params;
   const body = await req.json();
   if (!body?.comment) throw new AppError("Comment is required", 422);
 
   const row = await prisma.candidateComment.create({
     data: {
-      candidateId: params.id,
+      candidateId: id,
       authorId: session.sub,
       comment: String(body.comment).slice(0, 2000)
     }
@@ -22,7 +23,7 @@ export const POST = withApiGuard(async (req: NextRequest, { params }: Params) =>
 
   await prisma.candidateActivity.create({
     data: {
-      candidateId: params.id,
+      candidateId: id,
       action: "Comment added",
       meta: { by: session.sub }
     }

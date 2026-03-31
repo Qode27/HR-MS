@@ -5,7 +5,7 @@ import { success } from "@backend/utils/api-response";
 import { prisma } from "@/lib/db";
 import { AppError } from "@backend/utils/errors";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 export const GET = withApiGuard(async (req: NextRequest) => {
   await requirePermission(req, "onboarding:manage");
@@ -18,11 +18,12 @@ export const GET = withApiGuard(async (req: NextRequest) => {
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   await requirePermission(req, "onboarding:manage");
+  const { id } = await params;
   const payload = await req.json();
   if (!["TODO", "IN_PROGRESS", "DONE", "BLOCKED"].includes(payload?.status)) throw new AppError("Invalid status", 422);
 
   const task = await prisma.onboardingTask.update({
-    where: { id: params.id },
+    where: { id },
     data: { status: payload.status }
   });
 

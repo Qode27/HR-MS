@@ -50,13 +50,14 @@ export async function verifyRefreshToken(token: string): Promise<SessionPayload 
 }
 
 export async function getSession() {
-  const accessToken = cookies().get(COOKIE_NAME)?.value;
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(COOKIE_NAME)?.value;
   if (accessToken) {
     const access = await verifyAccessToken(accessToken);
     if (access) return access;
   }
 
-  const refreshToken = cookies().get(REFRESH_COOKIE_NAME)?.value;
+  const refreshToken = cookieStore.get(REFRESH_COOKIE_NAME)?.value;
   if (refreshToken) {
     const refresh = await verifyRefreshToken(refreshToken);
     if (refresh) return refresh;
@@ -66,7 +67,8 @@ export async function getSession() {
 }
 
 export async function getRefreshSession() {
-  const token = cookies().get(REFRESH_COOKIE_NAME)?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(REFRESH_COOKIE_NAME)?.value;
   if (!token) return null;
   return verifyRefreshToken(token);
 }

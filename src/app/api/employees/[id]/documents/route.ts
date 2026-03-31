@@ -7,13 +7,14 @@ import { success } from "@backend/utils/api-response";
 import { AppError } from "@backend/utils/errors";
 import { saveFile } from "@/lib/services/storage.service";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 const service = new EmployeeService();
 
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const session = await requirePermission(req, "employee:manage");
+  const { id } = await params;
   const formData = await req.formData();
   const file = formData.get("file");
   const type = String(formData.get("type") || "OTHER") as DocumentType;
@@ -25,7 +26,7 @@ export const POST = withApiGuard(async (req: NextRequest, { params }: Params) =>
   const bytes = Buffer.from(await file.arrayBuffer());
   const stored = await saveFile(bytes, file.name);
   const doc = await service.addDocument({
-    employeeId: params.id,
+    employeeId: id,
     type,
     fileName: file.name,
     filePath: stored.path,
