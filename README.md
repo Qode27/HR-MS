@@ -1,75 +1,170 @@
-# PeopleFlow HR (Enterprise Refactor)
+# PeopleFlow HR
 
-Production-ready HRMS + ATS built with Next.js, Prisma, and PostgreSQL.
+PeopleFlow HR is a Next.js 15 HRMS + ATS application backed by Prisma and PostgreSQL. It includes authentication, role-based access control, employee management, attendance, leave, payroll, recruitment, onboarding, reports, and document workflows.
 
-## Enterprise Refactor Highlights
-- Layered architecture with clear separation of concerns:
-  - `backend/controllers`, `backend/services`, `backend/repositories`, `backend/middleware`, `backend/utils`
-  - `frontend/components`, `frontend/hooks`, `frontend/services`, `frontend/styles`
-- Unified API envelope and guarded error handling (`withApiGuard`)
-- JWT auth with RBAC + API rate limiting
-- Structured file logging:
-  - `logs/app.log`
-  - `logs/error.log`
-  - `logs/security.log`
-- ATS upgraded with drag-and-drop Kanban stage transitions
-- Dashboard optimized with cache revalidation
-- Employee listing supports pagination metadata
-- Reports export endpoint:
-  - `/api/reports/export?format=csv`
-  - `/api/reports/export?format=xlsx`
+## Features
 
-## Modules
-- Auth & RBAC (Admin, HR, Manager, Employee, Recruiter)
-- Dashboard analytics widgets
-- Employee directory + profile + create
-- Attendance + Leave + Payroll basics
-- ATS jobs/candidates/pipeline/conversion
-- Onboarding tracker
-- Documents center
-- Reports and exports
-- Settings bootstrap + notifications
+- JWT authentication with RBAC
+- Employee directory, profile, and creation flows
+- Attendance and regularization workflows
+- Leave requests and approval decisions
+- Payroll runs and payslips
+- ATS jobs, candidates, interviews, pipeline, and candidate conversion
+- Onboarding task tracking
+- Reports overview and CSV/XLSX export
+- Notifications, settings bootstrap, and audit logging
 
-## Stack
-- Next.js 15, TypeScript, Tailwind, Framer Motion
-- Prisma + PostgreSQL
-- Zod validation, Zustand state
-- Recharts and table utilities
-- Vitest tests
+## Tech Stack
 
-## Setup
-1. Copy env:
+- Next.js 15
+- React 18
+- TypeScript
+- Prisma
+- PostgreSQL
+- Redis
+- Tailwind CSS
+- Zod
+- Vitest
+
+## Project Structure
+
+- `src/app` : App Router pages and API routes
+- `src/components` : shared UI and layout components
+- `src/lib` : auth, database, services, utilities, validators
+- `backend` : middleware, controllers, services, repositories, utilities
+- `prisma` : schema, migrations, and seed script
+- `docker-compose.yml` : app, PostgreSQL, and Redis services
+- `Dockerfile` : production container build
+
+## Environment Variables
+
+Example local development values are in [`.env.example`](/home/vaibhav/qode27/wasif/hrms/HR-MS/.env.example).
+
+### Local development
+
+Use [`.env`](/home/vaibhav/qode27/wasif/hrms/HR-MS/.env):
+
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/peopleflow_hr?schema=public"
+JWT_SECRET="replace-with-strong-secret"
+FILE_STORAGE_PATH="uploads"
+NEXT_PUBLIC_APP_NAME="PeopleFlow HR"
+NODE_ENV="development"
+REDIS_URL="redis://localhost:6379"
+```
+
+### Docker / container runtime
+
+Use [`.env.production`](/home/vaibhav/qode27/wasif/hrms/HR-MS/.env.production):
+
+```env
+DATABASE_URL="postgresql://postgres:postgres@db:5432/peopleflow_hr?schema=public"
+JWT_SECRET="strong-production-secret"
+FILE_STORAGE_PATH="uploads"
+NEXT_PUBLIC_APP_NAME="PeopleFlow HR"
+NODE_ENV="production"
+REDIS_URL="redis://redis:6379"
+```
+
+When the app runs inside Docker, use the Compose service names like `db` and `redis`, not `localhost`.
+
+## Local Setup
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy env file:
+
 ```bash
 cp .env.example .env
 ```
-2. Set credentials in `.env`.
-3. Install:
+
+3. Make sure PostgreSQL is available on `localhost:5432`.
+
+4. Generate Prisma client:
+
 ```bash
-npm.cmd install
-```
-4. Migrate + seed:
-```bash
-npx.cmd prisma migrate dev --name init
-npm.cmd run db:seed
-```
-5. Start:
-```bash
-npm.cmd run dev
+npm run db:generate
 ```
 
-## Production
-- `.env.production` template included
-- Dockerfile + docker-compose included
-- Deployment guidance in `deployment/README.md`
+5. Run migrations:
 
-## Test
 ```bash
-npm.cmd run test
+npm run db:migrate
 ```
+
+6. Seed the database:
+
+```bash
+npm run db:seed
+```
+
+7. Start the app:
+
+```bash
+npm run dev
+```
+
+The app will be available at `http://localhost:3000`.
+
+## Docker Setup
+
+Start the full stack with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+This starts:
+
+- `app` on `http://localhost:3000`
+- `db` on `localhost:5432`
+- `redis` on `localhost:6379`
+
+Notes:
+
+- The app service loads env vars from [`.env.production`](/home/vaibhav/qode27/wasif/hrms/HR-MS/.env.production) using `env_file`.
+- On container startup, `npm run start` runs `prisma migrate deploy` and then `next start`.
+- Uploaded files are mounted to `./uploads`.
+
+## Available Scripts
+
+```bash
+npm run dev
+npm run build
+npm run start
+npm run test
+npm run test:unit
+npm run test:watch
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+npm run bootstrap:logs
+```
+
+## Build Notes
+
+- `npm run build` runs `prisma generate && next build`
+- The app is configured to render on demand at runtime, which avoids static build issues for runtime-dependent authenticated pages
 
 ## Demo Credentials
+
 - Super Admin: `admin@peopleflow.local` / `Admin@123`
 - HR Admin: `hr@peopleflow.local` / `Admin@123`
 - Recruiter: `recruiter1@peopleflow.local` / `Admin@123`
 - Manager: `manager1@peopleflow.local` / `Admin@123`
 - Employee: `employee@peopleflow.local` / `Admin@123`
+
+## Troubleshooting
+
+- `Environment variable not found: DATABASE_URL`
+  Use `env_file` in Docker Compose and make sure the app container receives [`.env.production`](/home/vaibhav/qode27/wasif/hrms/HR-MS/.env.production).
+
+- App inside Docker cannot reach PostgreSQL
+  Use `db:5432` in `DATABASE_URL`, not `localhost:5432`.
+
+- App on host machine cannot reach PostgreSQL container
+  Use `localhost:5432` in [`.env`](/home/vaibhav/qode27/wasif/hrms/HR-MS/.env).
