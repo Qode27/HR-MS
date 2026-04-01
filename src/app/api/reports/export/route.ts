@@ -43,7 +43,7 @@ export const GET = withApiGuard(async (req: NextRequest) => {
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Employees");
     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
-    return new Response(buffer, {
+    return new Response(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": 'attachment; filename="employee-report.xlsx"'

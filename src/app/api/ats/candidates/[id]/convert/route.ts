@@ -5,13 +5,14 @@ import { requirePermission } from "@backend/middleware/auth-guard";
 import { success } from "@backend/utils/api-response";
 import { AppError } from "@backend/utils/errors";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   await requirePermission(req, "onboarding:manage");
   const payload = await req.json().catch(() => ({}));
 
-  const candidate = await prisma.candidate.findUnique({ where: { id: params.id }, include: { jobOpening: { include: { requisition: true } } } });
+  const candidate = await prisma.candidate.findUnique({ where: { id }, include: { jobOpening: { include: { requisition: true } } } });
   if (!candidate) throw new AppError("Candidate not found", 404);
   if (candidate.stage !== "JOINED") throw new AppError("Candidate must be in JOINED stage", 422);
 

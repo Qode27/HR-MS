@@ -4,11 +4,12 @@ import { requirePermission } from "@backend/middleware/auth-guard";
 import { success } from "@backend/utils/api-response";
 import { PayrollService } from "@backend/services/payroll.service";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 const service = new PayrollService();
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   const session = await requirePermission(req, "payroll:manage");
-  const run = await service.finalizeRun({ runId: params.id, actorUserId: session.sub });
+  const run = await service.finalizeRun({ runId: id, actorUserId: session.sub });
   return success(run);
 });

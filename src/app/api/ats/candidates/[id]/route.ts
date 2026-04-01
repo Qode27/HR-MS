@@ -6,12 +6,13 @@ import { requirePermission } from "@backend/middleware/auth-guard";
 import { parseBody } from "@backend/utils/request";
 import { success } from "@backend/utils/api-response";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   await requirePermission(req, "ats:manage");
   const candidate = await prisma.candidate.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       jobOpening: { include: { requisition: true } },
       comments: { orderBy: { createdAt: "desc" } },
@@ -26,10 +27,11 @@ export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => 
 });
 
 export const PATCH = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   const session = await requirePermission(req, "ats:manage");
   const payload = parseBody(candidateStageSchema, await req.json());
   const updated = await prisma.candidate.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       stage: payload.stage,
       rejectionReason: payload.rejectionReason,
