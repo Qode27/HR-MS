@@ -10,6 +10,7 @@ type Params = { params: Promise<{ id: string }> };
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   await requirePermission(req, "onboarding:manage");
+  const { id } = await params;
   const payload = await req.json().catch(() => ({}));
 
   const candidate = await prisma.candidate.findUnique({ where: { id }, include: { jobOpening: { include: { requisition: true } } } });

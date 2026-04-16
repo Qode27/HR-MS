@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { StatCard } from "@/components/stat-card";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { fetchDashboardSummary } from "@frontend/services/hrms-api";
 
 type DashboardData = Awaited<ReturnType<typeof fetchDashboardSummary>>;
@@ -13,6 +12,8 @@ type DashboardData = Awaited<ReturnType<typeof fetchDashboardSummary>>;
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const candidateSeries = data?.candidatesByStage || [];
+  const maxCandidates = Math.max(1, ...candidateSeries.map((row) => row._count));
 
   useEffect(() => {
     setLoading(true);
@@ -33,14 +34,26 @@ export default function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="h-80">
           <p className="mb-3 text-sm font-medium">Candidates by stage</p>
-          <ResponsiveContainer width="100%" height="90%">
-            <BarChart data={data?.candidatesByStage || []}>
-              <XAxis dataKey="stage" hide />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="_count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="space-y-3">
+            {candidateSeries.length > 0 ? (
+              candidateSeries.map((row) => {
+                const width = `${Math.max(8, Math.round((row._count / maxCandidates) * 100))}%`;
+                return (
+                  <div key={row.stage} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{row.stage.replaceAll("_", " ")}</span>
+                      <span>{row._count}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-secondary">
+                      <div className="h-2 rounded-full bg-primary" style={{ width }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground">No candidate data yet.</p>
+            )}
+          </div>
         </Card>
         <Card>
           <p className="mb-3 text-sm font-medium">Announcements</p>

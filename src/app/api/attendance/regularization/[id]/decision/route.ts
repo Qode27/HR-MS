@@ -11,6 +11,7 @@ const service = new AttendanceService();
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   const session = await requirePermission(req, "attendance:manage");
+  const { id } = await params;
   const payload = await req.json();
   const decision = payload?.decision;
   if (decision !== "APPROVED" && decision !== "REJECTED") throw new AppError("Invalid decision", 422);

@@ -135,6 +135,131 @@ async function main() {
   const locationRows = await prisma.workLocation.findMany();
   const leaveRows = await prisma.leaveType.findMany();
 
+  const departmentByName = new Map(deptRows.map((row) => [row.name, row]));
+  const designationByName = new Map(desigRows.map((row) => [row.name, row]));
+  const locationByName = new Map(locationRows.map((row) => [row.name, row]));
+  const adminLeaveDefaults = new Map(leaveRows.map((row) => [row.id, row.annualQuota]));
+
+  const baseEmployeeProfiles = [
+    {
+      email: "admin@peopleflow.local",
+      employeeCode: "ADM0001",
+      firstName: "Aarav",
+      lastName: "Admin",
+      department: "IT",
+      designation: "Admin Associate",
+      location: "Bengaluru HQ",
+      salaryMonthly: 90000
+    },
+    {
+      email: "hr@peopleflow.local",
+      employeeCode: "HR0001",
+      firstName: "Harini",
+      lastName: "HR",
+      department: "HR",
+      designation: "HR Executive",
+      location: "Bengaluru HQ",
+      salaryMonthly: 75000
+    },
+    {
+      email: "recruiter1@peopleflow.local",
+      employeeCode: "REC0001",
+      firstName: "Riya",
+      lastName: "Recruiter",
+      department: "HR",
+      designation: "Recruiter",
+      location: "Bengaluru HQ",
+      salaryMonthly: 70000
+    },
+    {
+      email: "recruiter2@peopleflow.local",
+      employeeCode: "REC0002",
+      firstName: "Kabir",
+      lastName: "Recruiter",
+      department: "HR",
+      designation: "Recruiter",
+      location: "Bengaluru HQ",
+      salaryMonthly: 70000
+    },
+    {
+      email: "manager1@peopleflow.local",
+      employeeCode: "MGR0001",
+      firstName: "Mohan",
+      lastName: "Manager",
+      department: "Engineering",
+      designation: "Manager",
+      location: "Bengaluru HQ",
+      salaryMonthly: 120000
+    },
+    {
+      email: "manager2@peopleflow.local",
+      employeeCode: "MGR0002",
+      firstName: "Nisha",
+      lastName: "Manager",
+      department: "Operations",
+      designation: "Manager",
+      location: "Bengaluru HQ",
+      salaryMonthly: 120000
+    },
+    {
+      email: "employee@peopleflow.local",
+      employeeCode: "EMP0001",
+      firstName: "Esha",
+      lastName: "Employee",
+      department: "Engineering",
+      designation: "Software Engineer",
+      location: "Bengaluru HQ",
+      salaryMonthly: 65000
+    }
+  ] as const;
+
+  for (const profile of baseEmployeeProfiles) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: profile.email } });
+    const department = departmentByName.get(profile.department) ?? deptRows[0];
+    const designation = designationByName.get(profile.designation) ?? desigRows[0];
+    const workLocation = locationByName.get(profile.location) ?? locationRows[0];
+    const employee = await prisma.employee.upsert({
+      where: { userId: user.id },
+      update: {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        employeeCode: profile.employeeCode,
+        departmentId: department.id,
+        designationId: designation.id,
+        workLocationId: workLocation.id,
+        salaryMonthly: profile.salaryMonthly
+      },
+      create: {
+        employeeCode: profile.employeeCode,
+        userId: user.id,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        personalEmail: user.email,
+        joiningDate: new Date(2025, 0, 1),
+        employmentType: "FULL_TIME",
+        departmentId: department.id,
+        designationId: designation.id,
+        workLocationId: workLocation.id,
+        salaryMonthly: profile.salaryMonthly,
+        skills: ["Communication", "HRMS"]
+      }
+    });
+
+    for (const leaveType of leaveRows) {
+      await prisma.leaveBalance.upsert({
+        where: { employeeId_leaveTypeId_year: { employeeId: employee.id, leaveTypeId: leaveType.id, year: 2026 } },
+        update: {},
+        create: {
+          employeeId: employee.id,
+          leaveTypeId: leaveType.id,
+          year: 2026,
+          allocated: adminLeaveDefaults.get(leaveType.id) ?? leaveType.annualQuota,
+          used: 0
+        }
+      });
+    }
+  }
+
   const managerUsers = await prisma.user.findMany({ where: { role: { name: { in: ["MANAGER", "HR_ADMIN"] } } } });
   const employeeUsers = await prisma.user.findMany({ where: { role: { name: "EMPLOYEE" } } });
 

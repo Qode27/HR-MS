@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 import { COOKIE_NAME, REFRESH_COOKIE_NAME } from "@/lib/constants";
 
 const publicPaths = ["/login", "/forgot-password", "/reset-password", "/careers", "/api/auth/login", "/api/auth/refresh", "/api/auth/reset-password", "/api/health"];
 const authBucket = new Map<string, { hits: number; resetAt: number }>();
+const encoder = new TextEncoder();
+const secret = encoder.encode(process.env.JWT_SECRET || "dev-secret-change-me");
 
-export function middleware(req: NextRequest) {
+async function hasValidSessionToken(accessToken?: string, refreshToken?: string) {
+  const verifyToken = async (token: string, expectedType: "access" | "refresh") => {
+    try {
+      const { payload } = await jwtVerify(token, secret);
+      return payload.typ === expectedType;
+    } catch {
+      return false;
+    }
+  };
+
+  if (accessToken && (await verifyToken(accessToken, "access"))) return true;
+  if (refreshToken && (await verifyToken(refreshToken, "refresh"))) return true;
+  return false;
+}
+
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname.startsWith("/_next") || pathname.startsWith("/favicon") || pathname.startsWith("/api/public")) {
     return NextResponse.next();
@@ -13,7 +31,7 @@ export function middleware(req: NextRequest) {
   const isPublic = publicPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const accessToken = req.cookies.get(COOKIE_NAME)?.value;
   const refreshToken = req.cookies.get(REFRESH_COOKIE_NAME)?.value;
-  const hasAnySessionToken = Boolean(accessToken || refreshToken);
+  const hasAnySessionToken = await hasValidSessionToken(accessToken, refreshToken);
 
   if (!hasAnySessionToken && !isPublic && !pathname.startsWith("/api/auth/forgot-password") && !pathname.startsWith("/api/auth/logout")) {
     if (pathname.startsWith("/api/")) {

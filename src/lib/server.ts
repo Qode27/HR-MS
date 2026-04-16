@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { fail } from "@/lib/http";
-import { hasPermissionDynamic } from "@/lib/rbac";
+import { hasPermissionDynamic } from "@/lib/rbac.server";
 
 export async function withPermission(req: NextRequest, permission: string) {
   const session = await getSession();

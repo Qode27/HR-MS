@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
-import { hasPermissionDynamic } from "@/lib/rbac";
+import { hasPermissionDynamic } from "@/lib/rbac.server";
 import { AppError } from "@backend/utils/errors";
 
 export async function requirePermission(req: NextRequest, permission: string) {

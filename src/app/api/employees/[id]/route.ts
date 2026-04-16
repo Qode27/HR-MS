@@ -19,6 +19,7 @@ export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => 
 export const PATCH = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   await requirePermission(req, "employee:manage");
+  const { id } = await params;
   const payload = await req.json();
   const updated = await service.update(id, payload);
   return success(updated);

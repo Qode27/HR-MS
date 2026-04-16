@@ -11,6 +11,7 @@ const service = new EmployeeService();
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   const session = await requirePermission(req, "employee:manage");
+  const { id } = await params;
   const payload = await req.json();
   if (!payload?.title) throw new AppError("Note title is required", 422);
 

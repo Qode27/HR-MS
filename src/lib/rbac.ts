@@ -1,5 +1,4 @@
 import { ROLE_PERMISSIONS } from "@/lib/constants";
-import { prisma } from "@/lib/db";
 
 type CacheItem = { permissions: string[]; expiresAt: number };
 const rolePermissionCache = new Map<string, CacheItem>();
@@ -18,6 +17,7 @@ export async function hasPermissionDynamic(role: string, permission: string) {
     return cached.permissions.includes(permission) || cached.permissions.includes("*");
   }
 
+  const { prisma } = await import("@/lib/db");
   const roleRow = await prisma.role.findUnique({
     where: { name: role as never },
     include: { permissions: { include: { permission: true } } }

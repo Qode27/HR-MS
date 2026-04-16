@@ -13,6 +13,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:dummy-employees": "tsx scripts/dummy-employees.ts",
+    "db:dummy-ats": "tsx scripts/dummy-ats.ts",
     "bootstrap:logs": "tsx scripts/bootstrap-logs.ts"
   },
   "dependencies": {

@@ -1,16 +1,13 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 
 export function StatCard({ title, value, hint }: { title: string; value: string | number; hint?: string }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <Card className="space-y-2">
-        <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-      </Card>
-    </motion.div>
+    <Card className="space-y-2">
+      <p className="text-sm text-muted-foreground">{title}</p>
+      <p className="text-2xl font-semibold tracking-tight">{value}</p>
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+    </Card>
   );
 }

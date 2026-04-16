@@ -61,13 +61,14 @@ export class EmployeeRepository {
     managerId?: string;
     workLocationId?: string;
     salaryMonthly: number;
-    skills: string[];
+    skills?: string[];
   }) {
     return prisma.employee.create({
       data: {
         ...data,
         employeeCode: data.employeeCode || (await this.nextEmployeeCode()),
-        joiningDate: new Date(data.joiningDate)
+        joiningDate: new Date(data.joiningDate),
+        skills: data.skills || []
       }
     });
   }
