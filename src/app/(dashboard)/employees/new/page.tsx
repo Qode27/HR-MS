@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { Textarea } from "@/components/ui/textarea";
+import { useDemoMode } from "@/lib/demo";
 
 export default function NewEmployeePage() {
   const router = useRouter();
+  const isDemo = useDemoMode();
   const [bootstrap, setBootstrap] = useState<{
     departments: Array<{ id: string; name: string }>;
     designations: Array<{ id: string; name: string }>;
@@ -65,7 +67,7 @@ export default function NewEmployeePage() {
         skills: form.skills ? form.skills.split(",").map((x) => x.trim()) : []
         })
       });
-      toast.success("Employee created");
+      toast.success(isDemo ? "Demo mode: action not saved" : "Employee created");
       router.push("/employees");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create employee");
@@ -109,7 +111,7 @@ export default function NewEmployeePage() {
           <Input placeholder="Emergency contact phone" value={form.emergencyPhone} onChange={(e) => setForm({ ...form, emergencyPhone: e.target.value })} />
           <Input className="md:col-span-2" placeholder="Skills (comma separated)" value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} />
           <Textarea className="md:col-span-2" placeholder="Notes for onboarding/profile context" />
-          <Button className="md:col-span-2" disabled={loading}>{loading ? "Creating..." : "Create Employee"}</Button>
+          <Button className="md:col-span-2" disabled={loading}>{loading ? "Creating..." : isDemo ? "Save demo employee" : "Create Employee"}</Button>
         </form>
       </Card>
     </section>

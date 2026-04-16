@@ -7,5 +7,5 @@ const controller = new DashboardController();
 
 export const GET = withApiGuard(async (req: NextRequest) => {
   const session = await getSession();
-  return controller.summary(req, session?.role);
+  return controller.summary(req, session?.role, session?.sub);
 });

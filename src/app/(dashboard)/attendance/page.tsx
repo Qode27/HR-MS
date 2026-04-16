@@ -8,24 +8,26 @@ import { useApi } from "@/hooks/use-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useDemoMode } from "@/lib/demo";
 
 export default function AttendancePage() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [q, setQ] = useState("");
   const { data } = useApi<any>(`/api/attendance?page=1&pageSize=200&month=${month}&year=${year}&q=${encodeURIComponent(q)}`, [month, year, q]);
+  const isDemo = useDemoMode();
 
   async function mark() {
     const res = await fetch("/api/attendance", { method: "POST" });
     const json = await res.json();
     if (!res.ok || json.success === false) return toast.error(json.error?.message || "Failed");
-    toast.success(json.data?.message || "Attendance updated");
+    toast.success(isDemo ? "Demo mode: action not saved" : json.data?.message || "Attendance updated");
     window.location.reload();
   }
 
   return (
     <section className="space-y-4">
-      <PageHeader title="Attendance Overview" subtitle="Track daily check-ins and work hours" actions={<Button onClick={mark}>Check In / Out</Button>} />
+      <PageHeader title="Attendance Overview" subtitle="Track daily check-ins and work hours" actions={<Button onClick={mark}>{isDemo ? "Demo check-in/out" : "Check In / Out"}</Button>} />
       <div className="grid gap-2 rounded-xl border bg-card/70 p-3 md:grid-cols-4">
         <Input type="number" min={1} max={12} value={month} onChange={(e) => setMonth(Number(e.target.value || "1"))} placeholder="Month" />
         <Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value || new Date().getFullYear()))} placeholder="Year" />

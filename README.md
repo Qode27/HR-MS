@@ -90,6 +90,16 @@ cp .env.example .env
 npm run db:generate
 ```
 
+## Production
+- `.env.production` template included
+- Dockerfile + docker-compose included
+- Deployment guidance in `deployment/README.md`
+- Live Azure target currently runs on App Service `hrms-260324`
+- Azure startup command should be `HOSTNAME=0.0.0.0 node server.js`
+- Health endpoints:
+  - `/api/health`
+  - `/api/health/readiness`
+
 5. Run migrations:
 
 ```bash
@@ -109,6 +119,17 @@ npm run dev
 ```
 
 The app will be available at `http://localhost:3000`.
+
+## Production
+
+- `.env.production` template included
+- Dockerfile + docker-compose included
+- Deployment guidance in `deployment/README.md`
+- Live Azure target currently runs on App Service `hrms-260324`
+- Azure startup command should be `HOSTNAME=0.0.0.0 node server.js`
+- Health endpoints:
+  - `/api/health`
+  - `/api/health/readiness`
 
 ## Docker Setup
 

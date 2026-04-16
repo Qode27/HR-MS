@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
 import { PageHeader } from "@/components/page-header";
@@ -15,14 +15,29 @@ export default function CandidateDetailPage() {
   const { data } = useApi<any>(`/api/ats/candidates/${id}`, [id]);
   const [comment, setComment] = useState("");
   const [interview, setInterview] = useState({ scheduledAt: "", mode: "Video", panelists: "", notes: "" });
+  const [stage, setStage] = useState("SCREENING");
 
-  async function moveToJoined() {
-    await fetch(`/api/ats/candidates/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: "JOINED" }) });
+  useEffect(() => {
+    if (data?.stage) setStage(data.stage);
+  }, [data?.stage]);
+
+  async function updateStage(nextStage = stage) {
+    const res = await fetch(`/api/ats/candidates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: nextStage })
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) return toast.error(json.error?.message || "Failed to update stage");
+    toast.success("Candidate stage updated");
     window.location.reload();
   }
 
   async function convert() {
-    await fetch(`/api/ats/candidates/${id}/convert`, { method: "POST" });
+    const res = await fetch(`/api/ats/candidates/${id}/convert`, { method: "POST" });
+    const json = await res.json();
+    if (!res.ok || json.success === false) return toast.error(json.error?.message || "Unable to convert candidate");
+    toast.success("Candidate converted to employee record");
     window.location.reload();
   }
 
@@ -60,13 +75,27 @@ export default function CandidateDetailPage() {
 
   return (
     <section className="space-y-4">
-      <PageHeader title="Candidate Detail" subtitle={data?.fullName || "Loading..."} actions={<div className="flex gap-2"><Button variant="outline" onClick={moveToJoined}>Mark Joined</Button><Button onClick={convert}>Convert to Employee</Button></div>} />
+      <PageHeader
+        title="Candidate Detail"
+        subtitle={data?.fullName || "Loading..."}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <select className="h-10 rounded-md border bg-background px-3 text-sm" value={stage} onChange={(e) => setStage(e.target.value)}>
+              {["SCREENING", "SHORTLISTED", "INTERVIEW_SCHEDULED", "INTERVIEWED", "SELECTED", "OFFERED", "JOINED", "REJECTED", "ON_HOLD"].map((value) => (
+                <option key={value} value={value}>{value === "JOINED" ? "Hired" : value.replaceAll("_", " ")}</option>
+              ))}
+            </select>
+            <Button variant="outline" onClick={() => updateStage()}>{stage === "JOINED" ? "Mark Hired" : "Update Stage"}</Button>
+            <Button onClick={convert} disabled={data?.stage !== "JOINED"}>Convert to Employee</Button>
+          </div>
+        }
+      />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2 space-y-3">
           <div className="grid gap-2 md:grid-cols-2">
             <div className="rounded border p-2 text-sm">Email: {data?.email}</div>
             <div className="rounded border p-2 text-sm">Phone: {data?.phone || "-"}</div>
-            <div className="rounded border p-2 text-sm">Stage: {data?.stage}</div>
+            <div className="rounded border p-2 text-sm">Stage: {data?.stage === "JOINED" ? "HIRED" : data?.stage}</div>
             <div className="rounded border p-2 text-sm">Source: {data?.source}</div>
             <div className="rounded border p-2 text-sm md:col-span-2">Skills: {(data?.skills || []).join(", ") || "-"}</div>
           </div>

@@ -8,9 +8,9 @@ const defaults = [
   { stage: "APPLIED", order: 1, label: "Applied" },
   { stage: "SCREENING", order: 2, label: "Screening" },
   { stage: "SHORTLISTED", order: 3, label: "Shortlisted" },
-  { stage: "INTERVIEW_SCHEDULED", order: 4, label: "Interview" },
-  { stage: "INTERVIEWED", order: 5, label: "Technical" },
-  { stage: "SELECTED", order: 6, label: "HR Round" },
+  { stage: "INTERVIEW_SCHEDULED", order: 4, label: "Interview Scheduled" },
+  { stage: "INTERVIEWED", order: 5, label: "Interviewed" },
+  { stage: "SELECTED", order: 6, label: "Selected" },
   { stage: "OFFERED", order: 7, label: "Offer" },
   { stage: "JOINED", order: 8, label: "Hired" },
   { stage: "REJECTED", order: 9, label: "Rejected" },
@@ -19,9 +19,15 @@ const defaults = [
 
 export const GET = withApiGuard(async (req: NextRequest) => {
   await requirePermission(req, "ats:manage");
-  const rows = await prisma.recruitmentStageConfig.findMany({ orderBy: { order: "asc" } });
-  if (rows.length > 0) return success(rows);
-  await prisma.recruitmentStageConfig.createMany({ data: defaults as never });
+  await prisma.$transaction(
+    defaults.map((row) =>
+      prisma.recruitmentStageConfig.upsert({
+        where: { stage: row.stage as never },
+        update: { order: row.order, label: row.label },
+        create: row as never
+      })
+    )
+  );
   return success(await prisma.recruitmentStageConfig.findMany({ orderBy: { order: "asc" } }));
 });
 

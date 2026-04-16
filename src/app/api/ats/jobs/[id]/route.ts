@@ -23,3 +23,21 @@ export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => 
   if (!row) throw new AppError("Job opening not found", 404);
   return success(row);
 });
+
+export const PATCH = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  await requirePermission(req, "ats:manage");
+  const { id } = await params;
+  const payload = await req.json();
+  const updated = await prisma.jobOpening.update({
+    where: { id },
+    data: {
+      title: payload?.title ? String(payload.title).slice(0, 120) : undefined,
+      description: payload?.description ? String(payload.description).slice(0, 5000) : undefined,
+      status: payload?.status || undefined,
+      openingsCount: payload?.openingsCount ? Number(payload.openingsCount) : undefined,
+      recruiterId: payload?.recruiterId ? String(payload.recruiterId) : payload?.recruiterId === "" ? null : undefined,
+      closeDate: payload?.closeDate ? new Date(String(payload.closeDate)) : payload?.closeDate === "" ? null : undefined
+    }
+  });
+  return success(updated);
+});

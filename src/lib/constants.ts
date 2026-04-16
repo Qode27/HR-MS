@@ -7,6 +7,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: ["*"],
   HR_ADMIN: [
     "dashboard:read",
+    "dashboard:company",
     "employee:read",
     "employee:manage",
     "attendance:read",
@@ -15,13 +16,39 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "leave:manage",
     "leave:approve",
     "payroll:self",
+    "payroll:read",
     "payroll:manage",
     "onboarding:manage",
     "ats:manage",
+    "documents:read",
+    "documents:manage",
     "reports:read",
     "settings:manage"
   ],
-  RECRUITER: ["dashboard:read", "ats:manage", "onboarding:manage", "employee:read", "attendance:read"],
-  MANAGER: ["dashboard:read", "team:read", "leave:approve", "attendance:read", "ats:collaborate", "employee:read"],
-  EMPLOYEE: ["dashboard:read", "self:read", "self:update", "attendance:self", "leave:self", "payroll:self"]
+  RECRUITER: [
+    "dashboard:read",
+    "ats:manage",
+    "onboarding:manage",
+    "employee:read",
+    "attendance:read"
+  ],
+  MANAGER: [
+    "dashboard:read",
+    "dashboard:team",
+    "team:read",
+    "leave:approve",
+    "attendance:read",
+    "ats:collaborate",
+    "employee:read"
+  ],
+  EMPLOYEE: [
+    "dashboard:read",
+    "dashboard:self",
+    "self:read",
+    "self:update",
+    "attendance:self",
+    "leave:self",
+    "payroll:self",
+    "documents:self"
+  ]
 };

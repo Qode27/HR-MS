@@ -6,6 +6,7 @@ import { useApi } from "@/hooks/use-api";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useDemoMode } from "@/lib/demo";
 
 function stageOf(metaRaw?: string | null) {
   if (!metaRaw) return "-";
@@ -19,6 +20,7 @@ function stageOf(metaRaw?: string | null) {
 
 export default function LeavePage() {
   const { data } = useApi<any>("/api/leave", []);
+  const isDemo = useDemoMode();
   async function decide(id: string, decision: "APPROVED" | "REJECTED") {
     const res = await fetch(`/api/leave/${id}/decision`, {
       method: "POST",
@@ -27,7 +29,7 @@ export default function LeavePage() {
     });
     const json = await res.json();
     if (!res.ok || json.success === false) return toast.error(json.error?.message || "Failed");
-    toast.success(`Leave ${decision.toLowerCase()}`);
+    toast.success(isDemo ? "Demo mode: action not saved" : `Leave ${decision.toLowerCase()}`);
     window.location.reload();
   }
 
@@ -67,7 +69,7 @@ export default function LeavePage() {
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => decide(r.id, "REJECTED")}>Reject</Button>
-              <Button size="sm" onClick={() => decide(r.id, "APPROVED")}>Approve</Button>
+              <Button size="sm" onClick={() => decide(r.id, "APPROVED")}>{isDemo ? "Approve demo" : "Approve"}</Button>
             </div>
           </div>
         ))}

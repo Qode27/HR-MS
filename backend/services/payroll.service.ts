@@ -18,6 +18,15 @@ function normalizeFormula(raw: unknown): FormulaConfig {
   };
 }
 
+function chunkArray<T>(items: T[], chunkSize: number) {
+  if (chunkSize <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
 export class PayrollService {
   private async formula() {
     const setting = await prisma.organizationSetting.findUnique({ where: { key: "payroll.formula" } });
@@ -58,70 +67,103 @@ export class PayrollService {
       }
     });
 
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.payslip.deleteMany({ where: { payrollItem: { payrollRunId: run.id } } });
-      await tx.payrollItem.deleteMany({ where: { payrollRunId: run.id } });
+    const payrollRows = employees.map((emp) => {
+      const gross = Number(emp.salaryMonthly);
+      const deductions = Math.round(gross * formula.deductionRate);
+      const reimbursement = formula.reimbursementFlat;
+      const net = gross - deductions + reimbursement;
 
-      const items = [] as Array<{ id: string; grossPay: number; deductions: number; netPay: number }>;
+      return {
+        employeeId: emp.id,
+        employeeCode: emp.employeeCode,
+        grossPay: gross,
+        deductions,
+        reimbursement,
+        netPay: net
+      };
+    });
 
-      for (const emp of employees) {
-        const gross = Number(emp.salaryMonthly);
-        const deductions = Math.round(gross * formula.deductionRate);
-        const reimbursement = formula.reimbursementFlat;
-        const net = gross - deductions + reimbursement;
+    const totals = payrollRows.reduce(
+      (acc, item) => {
+        acc.gross += item.grossPay;
+        acc.deductions += item.deductions;
+        acc.net += item.netPay;
+        return acc;
+      },
+      { gross: 0, deductions: 0, net: 0 }
+    );
 
-        const item = await tx.payrollItem.create({
-          data: {
+    try {
+      await prisma.$transaction([
+        prisma.payslip.deleteMany({ where: { payrollItem: { payrollRunId: run.id } } }),
+        prisma.payrollItem.deleteMany({ where: { payrollRunId: run.id } })
+      ]);
+
+      for (const batch of chunkArray(payrollRows, 50)) {
+        await prisma.payrollItem.createMany({
+          data: batch.map((item) => ({
             payrollRunId: run.id,
-            employeeId: emp.id,
-            grossPay: gross,
-            deductions,
-            reimbursement,
-            netPay: net
-          }
+            employeeId: item.employeeId,
+            grossPay: item.grossPay,
+            deductions: item.deductions,
+            reimbursement: item.reimbursement,
+            netPay: item.netPay
+          }))
         });
-
-        await tx.payslip.create({
-          data: {
-            employeeId: emp.id,
-            payrollItemId: item.id,
-            month: input.month,
-            year: input.year,
-            pdfPath: `/payslips/${emp.employeeCode}-${input.year}-${String(input.month).padStart(2, "0")}.pdf`
-          }
-        });
-
-        items.push({ id: item.id, grossPay: gross, deductions, netPay: net });
       }
 
-      const totals = items.reduce(
-        (acc, item) => {
-          acc.gross += item.grossPay;
-          acc.deductions += item.deductions;
-          acc.net += item.netPay;
-          return acc;
-        },
-        { gross: 0, deductions: 0, net: 0 }
-      );
+      const createdItems = await prisma.payrollItem.findMany({
+        where: { payrollRunId: run.id },
+        select: { id: true, employeeId: true }
+      });
 
-      const updatedRun = await tx.payrollRun.update({
+      const itemIdByEmployeeId = new Map(createdItems.map((item) => [item.employeeId, item.id]));
+
+      for (const batch of chunkArray(payrollRows, 50)) {
+        await prisma.payslip.createMany({
+          data: batch.map((item) => {
+            const payrollItemId = itemIdByEmployeeId.get(item.employeeId);
+            if (!payrollItemId) throw new AppError("Failed to link generated payroll items", 500);
+            return {
+              employeeId: item.employeeId,
+              payrollItemId,
+              month: input.month,
+              year: input.year,
+              pdfPath: `/payslips/${item.employeeCode}-${input.year}-${String(input.month).padStart(2, "0")}.pdf`
+            };
+          })
+        });
+      }
+
+      return prisma.payrollRun.update({
         where: { id: run.id },
         data: {
-          status: "COMPLETED",
+          status: "DRAFT",
           summaryJson: {
-            employees: items.length,
+            employees: payrollRows.length,
             totals,
             formula,
-            finalizedAt: new Date().toISOString(),
-            finalizedBy: input.actorUserId
+            lastPreparedAt: new Date().toISOString(),
+            preparedBy: input.actorUserId
           }
         }
       });
-
-      return updatedRun;
-    });
-
-    return result;
+    } catch (error) {
+      await prisma.payrollRun.update({
+        where: { id: run.id },
+        data: {
+          status: "FAILED",
+          summaryJson: {
+            employees: payrollRows.length,
+            totals,
+            formula,
+            failedAt: new Date().toISOString(),
+            failedBy: input.actorUserId
+          }
+        }
+      });
+      throw error;
+    }
   }
 
   async finalizeRun(input: { runId: string; actorUserId: string }) {
@@ -146,9 +188,31 @@ export class PayrollService {
     const employee = await prisma.employee.findFirst({ where: { userId } });
     if (!employee) return [];
     return prisma.payslip.findMany({
-      where: { employeeId: employee.id },
+      where: {
+        employeeId: employee.id,
+        payrollItem: {
+          payrollRun: {
+            status: "COMPLETED"
+          }
+        }
+      },
       include: { payrollItem: true },
       orderBy: [{ year: "desc" }, { month: "desc" }]
     });
+  }
+
+  async adminOverview() {
+    const [runs, employees] = await Promise.all([this.listRuns(), prisma.employee.count({ where: { deletedAt: null, status: "ACTIVE" } })]);
+    const totals = runs.reduce(
+      (acc, run) => {
+        acc.runs += 1;
+        acc.draft += run.status === "DRAFT" ? 1 : 0;
+        acc.completed += run.status === "COMPLETED" ? 1 : 0;
+        acc.net += Number((run.summaryJson as { totals?: { net?: number } } | null)?.totals?.net || 0);
+        return acc;
+      },
+      { runs: 0, draft: 0, completed: 0, net: 0 }
+    );
+    return { totals: { ...totals, employees }, runs };
   }
 }

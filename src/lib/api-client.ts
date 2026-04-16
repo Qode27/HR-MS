@@ -1,4 +1,10 @@
+import { demoRequest, isDemoMode } from "@/lib/demo";
+
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
+  if (isDemoMode()) {
+    return demoRequest<T>(url, init);
+  }
+
   const request = () =>
     fetch(url, {
       ...init,
