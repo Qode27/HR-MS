@@ -4,11 +4,10 @@ import { toAppError } from "@backend/utils/errors";
 import { getIp } from "@backend/utils/request";
 import { logger } from "@backend/utils/logger";
 
-type RouteContext = { params: Promise<any> };
-type Handler<Ctx extends RouteContext = RouteContext> = (req: NextRequest, ctx: Ctx) => Promise<Response>;
+type Handler<C = unknown> = (req: NextRequest, ctx: C) => Promise<Response>;
 
-export function withApiGuard<Ctx extends RouteContext = RouteContext>(handler: Handler<Ctx>): Handler<Ctx> {
-  return async (req: NextRequest, ctx: Ctx) => {
+export function withApiGuard<C = unknown>(handler: Handler<C>): Handler<C> {
+  return async (req: NextRequest, ctx: C) => {
     const requestId = crypto.randomUUID();
     try {
       return await handler(req, ctx);

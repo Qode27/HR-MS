@@ -3,6 +3,8 @@ import { AppProviders } from "@/components/app-providers";
 import type { Metadata } from "next";
 import { type ReactNode } from "react";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "PeopleFlow HR",
   description: "Enterprise-grade HRMS + ATS platform"

@@ -5,4 +5,8 @@ coverage
 .env.local
 prisma/migrations
 *.log
+
+#codex
+.codex
+
 *.tsbuildinfo

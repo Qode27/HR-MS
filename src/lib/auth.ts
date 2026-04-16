@@ -67,8 +67,7 @@ export async function getSession() {
 }
 
 export async function getRefreshSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(REFRESH_COOKIE_NAME)?.value;
+  const token = (await cookies()).get(REFRESH_COOKIE_NAME)?.value;
   if (!token) return null;
   return verifyRefreshToken(token);
 }

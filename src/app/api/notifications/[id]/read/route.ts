@@ -8,8 +8,8 @@ import { AppError } from "@backend/utils/errors";
 type Params = { params: Promise<{ id: string }> };
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
-  const session = await requirePermission(req, "dashboard:read");
   const { id } = await params;
+  const session = await requirePermission(req, "dashboard:read");
   const row = await prisma.notification.findFirst({ where: { id, userId: session.sub } });
   if (!row) throw new AppError("Notification not found", 404);
 

@@ -10,6 +10,7 @@ import { AppError } from "@backend/utils/errors";
 type Params = { params: Promise<{ id: string }> };
 
 export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   await requirePermission(req, "ats:manage");
   const { id } = await params;
   const candidate = await prisma.candidate.findUnique({
@@ -29,6 +30,7 @@ export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => 
 });
 
 export const PATCH = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   const session = await requirePermission(req, "ats:manage");
   const { id } = await params;
   const payload = parseBody(candidateStageSchema, await req.json());

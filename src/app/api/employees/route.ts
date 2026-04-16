@@ -20,7 +20,7 @@ export const POST = withApiGuard(async (req: NextRequest) => {
   const session = await requirePermission(req, "employee:manage");
   const payload = parseBody(employeeCreateSchema, await req.json());
 
-  const employee = await service.create(payload);
+  const employee = await service.create({ ...payload, skills: payload.skills ?? [] });
 
   await writeAuditLog({ userId: session.sub, action: "CREATE", module: "EMPLOYEE", entityId: employee.id });
   return success(employee, undefined, 201);

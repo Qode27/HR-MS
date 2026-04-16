@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 
@@ -9,14 +10,15 @@ export async function writeAuditLog(input: {
   meta?: unknown;
   ipAddress?: string;
 }) {
-  await prisma.auditLog.create({
-    data: {
-      action: input.action,
-      module: input.module,
-      entityId: input.entityId,
-      ipAddress: input.ipAddress,
-      ...(input.userId ? { userId: input.userId } : {}),
-      ...(input.meta === undefined ? {} : { meta: input.meta as Prisma.InputJsonValue })
-    }
-  });
+  const data: Prisma.AuditLogUncheckedCreateInput = {
+    action: input.action,
+    module: input.module
+  };
+
+  if (input.userId) data.userId = input.userId;
+  if (input.entityId) data.entityId = input.entityId;
+  if (input.meta !== undefined) data.meta = input.meta as Prisma.InputJsonValue;
+  if (input.ipAddress) data.ipAddress = input.ipAddress;
+
+  await prisma.auditLog.create({ data });
 }

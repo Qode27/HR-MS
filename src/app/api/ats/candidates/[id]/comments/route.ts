@@ -8,6 +8,7 @@ import { AppError } from "@backend/utils/errors";
 type Params = { params: Promise<{ id: string }> };
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   const session = await requirePermission(req, "ats:manage");
   const { id } = await params;
   const body = await req.json();

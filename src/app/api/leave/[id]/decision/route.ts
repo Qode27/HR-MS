@@ -9,6 +9,7 @@ type Params = { params: Promise<{ id: string }> };
 const service = new LeaveService();
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   const session = await requirePermission(req, "leave:approve");
   const { id } = await params;
   const payload = await req.json();

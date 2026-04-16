@@ -13,6 +13,7 @@ const service = new EmployeeService();
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
+  const { id } = await params;
   const session = await requirePermission(req, "employee:manage");
   const { id } = await params;
   const formData = await req.formData();

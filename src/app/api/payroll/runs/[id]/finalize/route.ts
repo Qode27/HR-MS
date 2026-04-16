@@ -8,8 +8,8 @@ type Params = { params: Promise<{ id: string }> };
 const service = new PayrollService();
 
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
-  const session = await requirePermission(req, "payroll:manage");
   const { id } = await params;
+  const session = await requirePermission(req, "payroll:manage");
   const run = await service.finalizeRun({ runId: id, actorUserId: session.sub });
   return success(run);
 });
