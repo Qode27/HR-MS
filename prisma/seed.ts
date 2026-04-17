@@ -261,12 +261,9 @@ async function main() {
   }
 
   const managerUsers = await prisma.user.findMany({ where: { role: { name: { in: ["MANAGER", "HR_ADMIN"] } } } });
-  const employeeUsers = await prisma.user.findMany({ where: { role: { name: "EMPLOYEE" } } });
-
   for (let i = 1; i <= 100; i++) {
     const firstName = `Emp${i}`;
     const lastName = `User${i}`;
-    const user = i <= employeeUsers.length ? employeeUsers[i - 1] : null;
     const dept = deptRows[i % deptRows.length];
     const desig = desigRows[i % desigRows.length];
     const manager = managerUsers[i % managerUsers.length];
@@ -276,7 +273,6 @@ async function main() {
       update: {},
       create: {
         employeeCode: `PF${String(i).padStart(4, "0")}`,
-        userId: user?.id,
         firstName,
         lastName,
         personalEmail: `emp${i}@peopleflow.local`,
