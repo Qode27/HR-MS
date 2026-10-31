@@ -9,3 +9,10 @@ export async function requirePermission(req: NextRequest, permission: string) {
   if (!(await hasPermissionDynamic(session.role, permission))) throw new AppError("Forbidden", 403);
   return session;
 }
+
+export async function requireRole(req: NextRequest, roles: string[]) {
+  const session = await getSession();
+  if (!session) throw new AppError("Unauthorized", 401);
+  if (!roles.includes(session.role)) throw new AppError("Forbidden", 403);
+  return session;
+}

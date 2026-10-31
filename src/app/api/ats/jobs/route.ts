@@ -7,7 +7,9 @@ import { jobOpeningSchema } from "@/lib/validators/schemas";
 export async function GET(req: NextRequest) {
   const access = await withPermission(req, "ats:manage");
   if (access.error) return access.error;
+  const tenantWhere = access.session.role === "MASTER_ADMIN" ? {} : { tenantId: access.session.tenantId ?? "__missing_tenant__" };
   const jobs = await prisma.jobOpening.findMany({
+    where: tenantWhere,
     include: { requisition: true, recruiter: true, candidates: true, workLocation: true },
     orderBy: { createdAt: "desc" }
   });
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest) {
   const job = await prisma.jobOpening.create({
     data: {
       ...parsed.data,
+      tenantId: access.session.role === "MASTER_ADMIN" ? null : access.session.tenantId,
       status: "OPEN",
       publishedAt: new Date()
     }

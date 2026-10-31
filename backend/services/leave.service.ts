@@ -31,8 +31,8 @@ function diffDaysInclusive(startDate: Date, endDate: Date) {
 }
 
 export class LeaveService {
-  async selfDashboard(userId: string) {
-    const employee = await prisma.employee.findFirst({ where: { userId } });
+  async selfDashboard(userId: string, tenantId?: string | null) {
+    const employee = await prisma.employee.findFirst({ where: { userId, ...(tenantId ? { tenantId } : {}) } });
     if (!employee) throw new AppError("Employee profile missing", 404);
 
     const [requests, balances, leaveTypes] = await Promise.all([
@@ -42,21 +42,23 @@ export class LeaveService {
         orderBy: { createdAt: "desc" }
       }),
       prisma.leaveBalance.findMany({ where: { employeeId: employee.id }, include: { leaveType: true } }),
-      prisma.leaveType.findMany({ orderBy: { name: "asc" } })
+      prisma.leaveType.findMany({ where: tenantId ? { tenantId } : {}, orderBy: { name: "asc" } })
     ]);
 
     return { employee, requests, balances, leaveTypes };
   }
 
-  async approvalQueue(input: { userId: string; role: string }) {
+  async approvalQueue(input: { userId: string; role: string; tenantId?: string | null }) {
+    const tenantFilter = input.tenantId ? { tenantId: input.tenantId } : {};
     const where =
       input.role === "MANAGER"
         ? {
             status: "PENDING" as LeaveStatus,
-            employee: { manager: { user: { id: input.userId } } }
+            employee: { ...tenantFilter, manager: { user: { id: input.userId } } }
           }
         : {
-            status: "PENDING" as LeaveStatus
+            status: "PENDING" as LeaveStatus,
+            employee: tenantFilter
           };
 
     const rows = await prisma.leaveRequest.findMany({
@@ -72,9 +74,137 @@ export class LeaveService {
     return rows.filter((row) => {
       const meta = parseMeta(row.rejectionReason);
       if (input.role === "MANAGER") return meta.stage === "MANAGER_PENDING";
-      if (input.role === "HR_ADMIN" || input.role === "SUPER_ADMIN") return meta.stage === "HR_PENDING";
+      if (["ADMIN", "HR_ADMIN", "SUPER_ADMIN"].includes(input.role)) return meta.stage === "HR_PENDING" || meta.stage === "MANAGER_PENDING";
       return false;
     });
+  }
+
+  async managementDashboard(input: {
+    userId: string;
+    role: string;
+    tenantId?: string | null;
+    status?: LeaveStatus;
+    employeeId?: string;
+    departmentId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }) {
+    if (!["SUPER_ADMIN", "ADMIN", "HR_ADMIN"].includes(input.role)) throw new AppError("Forbidden", 403);
+    if (!input.tenantId) throw new AppError("Tenant context required", 403);
+
+    const dateFilter =
+      input.dateFrom || input.dateTo
+        ? {
+            startDate: input.dateTo ? { lte: new Date(input.dateTo) } : undefined,
+            endDate: input.dateFrom ? { gte: new Date(input.dateFrom) } : undefined
+          }
+        : {};
+
+    const requestWhere = {
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+      ...dateFilter,
+      employee: { tenantId: input.tenantId, ...(input.departmentId ? { departmentId: input.departmentId } : {}) }
+    };
+
+    const [requests, stats, balances, employees, departments, approvalQueue] = await Promise.all([
+      prisma.leaveRequest.findMany({
+        where: requestWhere,
+        include: {
+          employee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              employeeCode: true,
+              department: { select: { name: true } }
+            }
+          },
+          leaveType: true
+        },
+        orderBy: { createdAt: "desc" },
+        take: 300
+      }),
+      prisma.leaveRequest.groupBy({
+        by: ["status"],
+        where: { employee: { tenantId: input.tenantId } },
+        _count: true
+      }),
+      prisma.leaveBalance.findMany({
+        where: { employee: { tenantId: input.tenantId } },
+        include: {
+          employee: { select: { id: true, firstName: true, lastName: true, employeeCode: true } },
+          leaveType: true
+        },
+        orderBy: [{ employee: { firstName: "asc" } }]
+      }),
+      prisma.employee.findMany({
+        where: { tenantId: input.tenantId, status: "ACTIVE" },
+        select: { id: true, firstName: true, lastName: true, employeeCode: true, department: { select: { id: true, name: true } } },
+        orderBy: [{ firstName: "asc" }, { lastName: "asc" }]
+      }),
+      prisma.department.findMany({
+        where: { tenantId: input.tenantId },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" }
+      }),
+      this.approvalQueue({ userId: input.userId, role: input.role, tenantId: input.tenantId })
+    ]);
+
+    const statusCounts = stats.reduce<Record<string, number>>((acc, row) => {
+      acc[row.status] = row._count;
+      return acc;
+    }, {});
+
+    return {
+      scope: "management",
+      requests,
+      approvalQueue,
+      balances,
+      employees,
+      departments,
+      stats: {
+        total: Object.values(statusCounts).reduce((sum, count) => sum + count, 0),
+        pending: statusCounts.PENDING || 0,
+        approved: statusCounts.APPROVED || 0,
+        rejected: statusCounts.REJECTED || 0,
+        cancelled: statusCounts.CANCELLED || 0
+      }
+    };
+  }
+
+  async teamDashboard(input: { userId: string; role: string; tenantId?: string | null; status?: LeaveStatus }) {
+    if (input.role !== "MANAGER") throw new AppError("Forbidden", 403);
+    if (!input.tenantId) throw new AppError("Tenant context required", 403);
+
+    const where = {
+      ...(input.status ? { status: input.status } : {}),
+      employee: { tenantId: input.tenantId, manager: { user: { id: input.userId } } }
+    };
+
+    const [requests, approvalQueue] = await Promise.all([
+      prisma.leaveRequest.findMany({
+        where,
+        include: {
+          employee: { select: { id: true, firstName: true, lastName: true, employeeCode: true } },
+          leaveType: true
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200
+      }),
+      this.approvalQueue({ userId: input.userId, role: input.role, tenantId: input.tenantId })
+    ]);
+
+    return {
+      scope: "team",
+      requests,
+      approvalQueue,
+      stats: {
+        pending: requests.filter((request) => request.status === "PENDING").length,
+        approved: requests.filter((request) => request.status === "APPROVED").length,
+        rejected: requests.filter((request) => request.status === "REJECTED").length
+      }
+    };
   }
 
   async apply(input: {
@@ -130,11 +260,36 @@ export class LeaveService {
     return request;
   }
 
+  async cancelOwn(input: { leaveRequestId: string; userId: string; tenantId?: string | null }) {
+    const request = await prisma.leaveRequest.findUnique({
+      where: { id: input.leaveRequestId },
+      include: { employee: true }
+    });
+    if (!request) throw new AppError("Leave request not found", 404);
+    if (request.employee.userId !== input.userId) throw new AppError("Forbidden", 403);
+    if (input.tenantId && request.employee.tenantId !== input.tenantId) throw new AppError("Forbidden", 403);
+    if (request.status !== "PENDING") throw new AppError("Only pending leave requests can be cancelled", 409);
+
+    return prisma.leaveRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "CANCELLED",
+        rejectionReason: JSON.stringify({
+          ...parseMeta(request.rejectionReason),
+          stage: "REJECTED",
+          note: "Cancelled by employee"
+        } satisfies ApprovalMeta)
+      },
+      include: { leaveType: true }
+    });
+  }
+
   async decide(input: {
     leaveRequestId: string;
     decision: "APPROVED" | "REJECTED";
     actorUserId: string;
     actorRole: string;
+    actorTenantId?: string | null;
     note?: string;
   }) {
     const request = await prisma.leaveRequest.findUnique({
@@ -142,6 +297,10 @@ export class LeaveService {
       include: { employee: { include: { manager: { include: { user: true } } } }, leaveType: true }
     });
     if (!request) throw new AppError("Leave request not found", 404);
+    if (input.actorRole !== "MASTER_ADMIN" && input.actorTenantId && request.employee.tenantId !== input.actorTenantId) {
+      throw new AppError("Forbidden", 403);
+    }
+    if (input.actorRole !== "MASTER_ADMIN" && !input.actorTenantId) throw new AppError("Tenant context required", 403);
     if (request.status !== "PENDING") throw new AppError("Leave request already processed", 409);
 
     const meta = parseMeta(request.rejectionReason);
@@ -151,7 +310,7 @@ export class LeaveService {
       if (input.actorRole === "MANAGER" && managerUserId !== input.actorUserId) {
         throw new AppError("You can only approve your team requests", 403);
       }
-      if (!["MANAGER", "HR_ADMIN", "SUPER_ADMIN"].includes(input.actorRole)) {
+      if (!["MANAGER", "ADMIN", "HR_ADMIN", "SUPER_ADMIN"].includes(input.actorRole)) {
         throw new AppError("Forbidden", 403);
       }
 
@@ -189,7 +348,7 @@ export class LeaveService {
     }
 
     if (meta.stage === "HR_PENDING") {
-      if (!["HR_ADMIN", "SUPER_ADMIN"].includes(input.actorRole)) throw new AppError("Only HR/Admin can finalize", 403);
+      if (!["ADMIN", "HR_ADMIN", "SUPER_ADMIN"].includes(input.actorRole)) throw new AppError("Only HR/Admin can finalize", 403);
 
       if (input.decision === "REJECTED") {
         return prisma.leaveRequest.update({

@@ -15,7 +15,8 @@ function parsePeriod(searchParams: URLSearchParams) {
 }
 
 export const GET = withApiGuard(async (req: NextRequest) => {
-  await requirePermission(req, "reports:read");
+  const session = await requirePermission(req, "reports:read");
+  const tenantWhere = session.role === "MASTER_ADMIN" ? {} : { tenantId: session.tenantId ?? "__missing_tenant__" };
 
   const { searchParams } = new URL(req.url);
   const key = searchParams.get("key") || "";
@@ -35,6 +36,7 @@ export const GET = withApiGuard(async (req: NextRequest) => {
         await prisma.employee.findMany({
           where: {
             deletedAt: null,
+            ...tenantWhere,
             departmentId: departmentId || undefined,
             ...(searchParams.get("year")
               ? {
@@ -60,6 +62,7 @@ export const GET = withApiGuard(async (req: NextRequest) => {
     case "department-headcount":
       rows = await prisma.department
         .findMany({
+          where: tenantWhere,
           include: {
             employees: { where: { deletedAt: null } }
           },
@@ -72,6 +75,7 @@ export const GET = withApiGuard(async (req: NextRequest) => {
         await prisma.employee.findMany({
           where: {
             deletedAt: null,
+            ...tenantWhere,
             joiningDate: { gte: monthStart, lte: monthEnd }
           },
           include: { department: true },
@@ -85,29 +89,33 @@ export const GET = withApiGuard(async (req: NextRequest) => {
       }));
       break;
     case "attendance-monthly":
-      rows = await prisma.employee.findMany({
-        where: { deletedAt: null },
-        include: {
-          attendanceRecords: {
-            where: { date: { gte: monthStart, lte: monthEnd } }
-          }
-        },
-        orderBy: { firstName: "asc" }
-      }).then((employees) =>
-        employees.map((employee) => ({
-          employee: `${employee.firstName} ${employee.lastName}`,
-          present: employee.attendanceRecords.filter((row) => row.status === "PRESENT").length,
-          absent: employee.attendanceRecords.filter((row) => row.status === "ABSENT").length,
-          onLeave: employee.attendanceRecords.filter((row) => row.status === "ON_LEAVE").length,
-          lateMinutes: employee.attendanceRecords.reduce((sum, row) => sum + row.lateMinutes, 0)
-        }))
-      );
+      rows = await prisma.timesheet.findMany({
+        where: { ...(session.role === "MASTER_ADMIN" ? {} : { tenantId: session.tenantId ?? "__missing_tenant__" }), date: { gte: monthStart, lte: monthEnd } },
+        include: { user: { select: { fullName: true, employee: { select: { employeeCode: true, firstName: true, lastName: true } } } } },
+        orderBy: { date: "desc" }
+      }).then((entries) => {
+        const totals = new Map<string, { employee: string; pendingHours: number; approvedHours: number; rejectedHours: number; totalHours: number }>();
+        for (const entry of entries) {
+          const employee = entry.user.employee;
+          const label = employee ? `${employee.employeeCode} - ${employee.firstName} ${employee.lastName}` : entry.user.fullName;
+          const current = totals.get(entry.userId) || { employee: label, pendingHours: 0, approvedHours: 0, rejectedHours: 0, totalHours: 0 };
+          const hours = Number(entry.hoursWorked);
+          if (entry.status === "APPROVED") current.approvedHours += hours;
+          if (entry.status === "SUBMITTED") current.pendingHours += hours;
+          if (entry.status === "REJECTED") current.rejectedHours += hours;
+          current.totalHours += hours;
+          totals.set(entry.userId, current);
+        }
+        return Array.from(totals.values());
+      });
       break;
     case "leave-history":
       rows = (
         await prisma.leaveRequest.findMany({
           where: {
             createdAt: { gte: monthStart, lte: monthEnd }
+            ,
+            employee: tenantWhere
           },
           include: { employee: true, leaveType: true },
           orderBy: { createdAt: "desc" }
@@ -123,7 +131,7 @@ export const GET = withApiGuard(async (req: NextRequest) => {
     case "payroll-summary":
       rows = (
         await prisma.payrollRun.findMany({
-          where: searchParams.get("year") ? { year } : undefined,
+          where: { ...(searchParams.get("year") ? { year } : {}), ...tenantWhere },
           orderBy: [{ year: "desc" }, { month: "desc" }]
         })
       ).map((run) => ({
@@ -136,8 +144,8 @@ export const GET = withApiGuard(async (req: NextRequest) => {
       break;
     case "ats-pipeline": {
       const [pipeline, openJobs] = await Promise.all([
-        prisma.candidate.groupBy({ by: ["stage"], _count: true }),
-        prisma.jobOpening.count({ where: { status: "OPEN" } })
+        prisma.candidate.groupBy({ by: ["stage"], where: tenantWhere, _count: true }),
+        prisma.jobOpening.count({ where: { status: "OPEN", ...tenantWhere } })
       ]);
       rows = pipeline.map((item) => ({
         stage: item.stage === "JOINED" ? "HIRED" : item.stage.replaceAll("_", " "),
@@ -149,6 +157,7 @@ export const GET = withApiGuard(async (req: NextRequest) => {
     case "document-register":
       rows = (
         await prisma.document.findMany({
+          where: { ...tenantWhere, deletedAt: null },
           include: {
             employee: { select: { employeeCode: true, firstName: true, lastName: true } },
             candidate: { select: { fullName: true } }

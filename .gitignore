@@ -3,10 +3,29 @@ node_modules
 coverage
 .env
 .env.local
-prisma/migrations
 *.log
 
 #codex
 .codex
 
 *.tsbuildinfo
+
+# --- secrets & build/deploy junk (never commit) ---
+.env.*
+!.env.example
+!**/.env.compose.example
+devops-project/docker/.env.compose
+*.zip
+qode27-*/
+tmp/
+tmp_*.sql
+test-results/
+uploads/
+logs/
+_to_delete/
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl

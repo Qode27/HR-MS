@@ -10,9 +10,11 @@ type Params = { params: Promise<{ id: string }> };
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   const session = await requirePermission(req, "ats:manage");
-  const { id } = await params;
   const body = await req.json();
   if (!body?.comment) throw new AppError("Comment is required", 422);
+  const tenantWhere = session.role === "MASTER_ADMIN" ? {} : { tenantId: session.tenantId ?? "__missing_tenant__" };
+  const candidate = await prisma.candidate.findFirst({ where: { id, ...tenantWhere }, select: { id: true } });
+  if (!candidate) throw new AppError("Candidate not found", 404);
 
   const row = await prisma.candidateComment.create({
     data: {

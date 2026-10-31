@@ -6,25 +6,21 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/use-api";
 import { hasPermission } from "@/lib/rbac";
-import { navItems } from "@/lib/navigation";
+import { getNavPath, navItems } from "@/lib/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDemoMode } from "@/lib/demo";
 
 type MeResponse = { sub: string; role: string; email: string; name: string };
 
 export function Sidebar() {
   const pathname = usePathname();
   const { data, loading } = useApi<MeResponse>("/api/auth/me", []);
-  const isDemo = useDemoMode();
   const role = data?.role || "EMPLOYEE";
   const currentPath = pathname ?? "";
-  const visibleNav = isDemo
-    ? navItems
-    : navItems.filter((item) => {
-        if (!item.permission) return true;
-        if (Array.isArray(item.permission)) return item.permission.some((perm) => hasPermission(role, perm));
-        return hasPermission(role, item.permission);
-      });
+  const visibleNav = navItems.filter((item) => {
+    if (!item.permission) return true;
+    if (Array.isArray(item.permission)) return item.permission.some((perm) => hasPermission(role, perm));
+    return hasPermission(role, item.permission);
+  });
 
   return (
     <aside className="sticky top-0 hidden h-screen w-64 flex-col border-r bg-card/80 p-4 backdrop-blur md:flex">
@@ -46,7 +42,8 @@ export function Sidebar() {
           <p className="px-2 text-xs text-muted-foreground">No menu items available for this role.</p>
         ) : visibleNav.map((item) => {
           const Icon = item.icon;
-          const active = currentPath === item.href || currentPath.startsWith(`${item.href}/`);
+          const itemPath = getNavPath(item.href);
+          const active = currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
           return (
             <Link
               key={item.href}

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { DocumentType, UserStatus } from "@prisma/client";
+import { DocumentType, SalaryType, UserStatus } from "@prisma/client";
 
 export class EmployeeRepository {
   async list(input: {
@@ -8,6 +8,7 @@ export class EmployeeRepository {
     designationId?: string;
     managerId?: string;
     status?: UserStatus;
+    tenantId?: string | null;
     skip: number;
     take: number;
   }) {
@@ -17,6 +18,7 @@ export class EmployeeRepository {
       designationId: input.designationId || undefined,
       managerId: input.managerId || undefined,
       status: input.status || undefined,
+      tenantId: input.tenantId || undefined,
       OR: [
         { firstName: { contains: input.q, mode: "insensitive" as const } },
         { lastName: { contains: input.q, mode: "insensitive" as const } },
@@ -42,9 +44,9 @@ export class EmployeeRepository {
     return { items, total };
   }
 
-  async nextEmployeeCode() {
+  async nextEmployeeCode(tenantId?: string | null) {
     const year = new Date().getFullYear();
-    const count = await prisma.employee.count();
+    const count = await prisma.employee.count({ where: tenantId ? { tenantId } : {} });
     return `PF-${year}-${String(count + 1).padStart(5, "0")}`;
   }
 
@@ -61,21 +63,35 @@ export class EmployeeRepository {
     managerId?: string;
     workLocationId?: string;
     salaryMonthly: number;
+    salaryType?: SalaryType;
+    baseSalary?: number;
+    hourlyRate?: number;
+    allowances?: number;
+    deductions?: number;
     skills?: string[];
+    tenantId?: string | null;
   }) {
+    const salaryType = data.salaryType || "FIXED";
+    const salaryMonthly = data.salaryMonthly;
     return prisma.employee.create({
       data: {
         ...data,
-        employeeCode: data.employeeCode || (await this.nextEmployeeCode()),
+        employeeCode: data.employeeCode || (await this.nextEmployeeCode(data.tenantId)),
         joiningDate: new Date(data.joiningDate),
+        salaryType,
+        salaryMonthly,
+        baseSalary: salaryType === "FIXED" ? data.baseSalary ?? salaryMonthly : data.baseSalary ?? 0,
+        hourlyRate: salaryType === "HOURLY" ? data.hourlyRate : null,
+        allowances: salaryType === "FIXED" ? data.allowances ?? 0 : 0,
+        deductions: salaryType === "FIXED" ? data.deductions ?? 0 : 0,
         skills: data.skills || []
       }
     });
   }
 
-  async byId(id: string) {
-    return prisma.employee.findUnique({
-      where: { id },
+  async byId(id: string, tenantId?: string | null) {
+    return prisma.employee.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
       include: {
         user: { select: { id: true, email: true, status: true } },
         department: true,
@@ -105,19 +121,21 @@ export class EmployeeRepository {
 
   async addDocument(input: {
     employeeId: string;
+    tenantId?: string | null;
     type: DocumentType;
     fileName: string;
     filePath: string;
     uploadedById?: string;
   }) {
     const latest = await prisma.document.findFirst({
-      where: { employeeId: input.employeeId, type: input.type },
+      where: { employeeId: input.employeeId, type: input.type, ...(input.tenantId ? { tenantId: input.tenantId } : {}) },
       orderBy: { version: "desc" }
     });
     const nextVersion = (latest?.version || 0) + 1;
     return prisma.document.create({
       data: {
         employeeId: input.employeeId,
+        tenantId: input.tenantId,
         type: input.type,
         fileName: input.fileName,
         filePath: input.filePath,
@@ -127,17 +145,18 @@ export class EmployeeRepository {
     });
   }
 
-  async bootstrap() {
+  async bootstrap(tenantId?: string | null) {
+    const tenantWhere = tenantId ? { tenantId } : {};
     const [departments, designations, managers, locations] = await Promise.all([
-      prisma.department.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } }),
-      prisma.designation.findMany({ orderBy: { name: "asc" } }),
+      prisma.department.findMany({ where: { deletedAt: null, ...tenantWhere }, orderBy: { name: "asc" } }),
+      prisma.designation.findMany({ where: tenantWhere, orderBy: { name: "asc" } }),
       prisma.employee.findMany({
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...tenantWhere },
         select: { id: true, firstName: true, lastName: true, employeeCode: true },
         orderBy: { firstName: "asc" },
         take: 200
       }),
-      prisma.workLocation.findMany({ orderBy: { name: "asc" } })
+      prisma.workLocation.findMany({ where: tenantWhere, orderBy: { name: "asc" } })
     ]);
     return { departments, designations, managers, locations };
   }

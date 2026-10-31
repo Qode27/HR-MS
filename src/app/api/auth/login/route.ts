@@ -32,12 +32,13 @@ export const POST = withApiGuard(async (req: NextRequest) => {
     sub: user.id,
     role: user.role.name,
     email: user.email,
-    name: user.fullName
+    name: user.fullName,
+    tenantId: user.tenantId
   };
   const accessToken = await signAccessToken(authPayload);
   const refreshToken = await signRefreshToken(authPayload);
 
-  const res = success({ user: { id: user.id, email: user.email, name: user.fullName, role: user.role.name } });
+  const res = success({ user: { id: user.id, email: user.email, name: user.fullName, role: user.role.name, tenantId: user.tenantId } });
   res.cookies.set(COOKIE_NAME, accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

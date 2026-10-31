@@ -6,6 +6,6 @@ import { EmployeeController } from "@backend/controllers/employee.controller";
 const controller = new EmployeeController();
 
 export const GET = withApiGuard(async (req: NextRequest) => {
-  await requirePermission(req, "employee:read");
-  return controller.bootstrap();
+  const session = await requirePermission(req, "employee:read");
+  return controller.bootstrap(session.role === "MASTER_ADMIN" ? undefined : session.tenantId);
 });

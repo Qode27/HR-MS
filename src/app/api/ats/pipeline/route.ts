@@ -6,6 +6,6 @@ import { requirePermission } from "@backend/middleware/auth-guard";
 const controller = new AtsController();
 
 export const GET = withApiGuard(async (req: NextRequest) => {
-  await requirePermission(req, "ats:manage");
-  return controller.pipeline(req);
+  const session = await requirePermission(req, "ats:manage");
+  return controller.pipeline(req, session.role === "MASTER_ADMIN" ? undefined : session.tenantId);
 });

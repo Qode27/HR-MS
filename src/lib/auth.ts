@@ -10,6 +10,8 @@ export type SessionPayload = {
   role: string;
   email: string;
   name: string;
+  tenantId?: string | null;
+  tenantSlug?: string | null;
 };
 
 export async function signAccessToken(payload: SessionPayload) {
@@ -22,7 +24,7 @@ export async function signAccessToken(payload: SessionPayload) {
 }
 
 export async function signRefreshToken(payload: SessionPayload) {
-  return new SignJWT({ sub: payload.sub, email: payload.email, role: payload.role, name: payload.name, typ: "refresh" })
+  return new SignJWT({ sub: payload.sub, email: payload.email, role: payload.role, name: payload.name, tenantId: payload.tenantId, tenantSlug: payload.tenantSlug, typ: "refresh" })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")

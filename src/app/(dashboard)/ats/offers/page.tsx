@@ -5,8 +5,8 @@ import { Card } from "@/components/ui/card";
 import { useApi } from "@/hooks/use-api";
 
 export default function OffersPage() {
-  const { data } = useApi<any[]>("/api/ats/candidates", []);
-  const offers = (data || []).filter((candidate) => ["OFFERED", "JOINED"].includes(candidate.stage));
+  const { data } = useApi<{ items: any[] }>("/api/ats/candidates?status=&stage=OFFER&limit=100", []);
+  const offers = (data?.items || []).filter((candidate) => ["SELECTED", "OFFERED", "JOINED"].includes(candidate.stage));
 
   return (
     <section className="space-y-4">

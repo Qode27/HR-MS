@@ -13,11 +13,12 @@ export type Candidate = {
 export type RecruitmentStage = { stage: string; order: number; label: string };
 
 export async function fetchCandidates(query = "") {
-  return api<Candidate[]>(`/api/ats/candidates?q=${encodeURIComponent(query)}`);
+  const data = await api<{ items: Candidate[] }>(`/api/ats/candidates?search=${encodeURIComponent(query)}&limit=100`);
+  return data.items;
 }
 
 export async function updateCandidateStage(candidateId: string, stage: string) {
-  return api(`/api/ats/candidates/${candidateId}`, {
+  return api(`/api/ats/candidates/${candidateId}/stage`, {
     method: "PATCH",
     body: JSON.stringify({ stage })
   });

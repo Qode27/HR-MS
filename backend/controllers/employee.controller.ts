@@ -6,7 +6,7 @@ import { UserStatus } from "@prisma/client";
 export class EmployeeController {
   constructor(private readonly service = new EmployeeService()) {}
 
-  async list(req: NextRequest) {
+  async list(req: NextRequest, tenantId?: string | null) {
     const { searchParams } = new URL(req.url);
     const data = await this.service.list({
       q: searchParams.get("q") || "",
@@ -15,7 +15,8 @@ export class EmployeeController {
       managerId: searchParams.get("managerId") || undefined,
       status: (searchParams.get("status") as UserStatus | null) || undefined,
       page: Number(searchParams.get("page") || "1"),
-      pageSize: Number(searchParams.get("pageSize") || "10")
+      pageSize: Number(searchParams.get("pageSize") || "10"),
+      tenantId
     });
 
     return success({
@@ -26,12 +27,12 @@ export class EmployeeController {
     });
   }
 
-  async detail(id: string) {
-    const data = await this.service.detail(id);
+  async detail(id: string, tenantId?: string | null) {
+    const data = await this.service.detail(id, tenantId);
     return success(data);
   }
 
-  async bootstrap() {
-    return success(await this.service.bootstrap());
+  async bootstrap(tenantId?: string | null) {
+    return success(await this.service.bootstrap(tenantId));
   }
 }

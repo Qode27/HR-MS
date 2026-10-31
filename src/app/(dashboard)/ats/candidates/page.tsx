@@ -15,14 +15,10 @@ export default function CandidateListPage() {
   const [stage, setStage] = useState("all");
   const [source, setSource] = useState("all");
   const [form, setForm] = useState({ jobOpeningId: "", fullName: "", email: "", phone: "", currentLocation: "", noticePeriodDays: "", totalExperience: "", skills: "", education: "", source: "DIRECT" });
-  const { data } = useApi<any[]>(`/api/ats/candidates?q=${encodeURIComponent(query)}`, [query]);
+  const { data } = useApi<{ items: any[] }>(`/api/ats/candidates?search=${encodeURIComponent(query)}&stage=${stage === "all" ? "" : stage}&source=${source === "all" ? "" : source}&limit=100`, [query, stage, source]);
   const jobs = useApi<any[]>("/api/ats/jobs", []);
 
-  const filteredRows = (data || []).filter((candidate) => {
-    const matchesStage = stage === "all" || candidate.stage === stage;
-    const matchesSource = source === "all" || candidate.source === source;
-    return matchesStage && matchesSource;
-  });
+  const filteredRows = data?.items || [];
 
   async function createCandidate() {
     const res = await fetch("/api/ats/candidates", {

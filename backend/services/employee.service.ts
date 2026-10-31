@@ -13,6 +13,7 @@ export class EmployeeService {
     status?: UserStatus;
     page?: number;
     pageSize?: number;
+    tenantId?: string | null;
   }) {
     const page = Math.max(1, Number(query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize || 10)));
@@ -24,6 +25,7 @@ export class EmployeeService {
       designationId: query.designationId,
       managerId: query.managerId,
       status: query.status,
+      tenantId: query.tenantId,
       skip,
       take: pageSize
     });
@@ -33,7 +35,7 @@ export class EmployeeService {
   async create(input: Parameters<EmployeeRepository["create"]>[0]) {
     for (let i = 0; i < 3; i++) {
       try {
-        const code = await this.repo.nextEmployeeCode();
+        const code = await this.repo.nextEmployeeCode(input.tenantId);
         return await this.repo.create({ ...input, employeeCode: code });
       } catch (error) {
         if (!(error instanceof Error) || !error.message.includes("Unique constraint")) throw error;
@@ -42,8 +44,8 @@ export class EmployeeService {
     throw new AppError("Unable to generate unique employee code", 500);
   }
 
-  async detail(id: string) {
-    const data = await this.repo.byId(id);
+  async detail(id: string, tenantId?: string | null) {
+    const data = await this.repo.byId(id, tenantId);
     if (!data) throw new AppError("Employee not found", 404);
     return data;
   }
@@ -60,7 +62,7 @@ export class EmployeeService {
     return this.repo.addDocument(input);
   }
 
-  bootstrap() {
-    return this.repo.bootstrap();
+  bootstrap(tenantId?: string | null) {
+    return this.repo.bootstrap(tenantId);
   }
 }

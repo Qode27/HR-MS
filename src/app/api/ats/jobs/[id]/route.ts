@@ -10,7 +10,6 @@ type Params = { params: Promise<{ id: string }> };
 export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   await requirePermission(req, "ats:manage");
-  const { id } = await params;
   const row = await prisma.jobOpening.findUnique({
     where: { id },
     include: {

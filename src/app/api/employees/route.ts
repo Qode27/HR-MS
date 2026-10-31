@@ -12,15 +12,15 @@ const controller = new EmployeeController();
 const service = new EmployeeService();
 
 export const GET = withApiGuard(async (req: NextRequest) => {
-  await requirePermission(req, "employee:read");
-  return controller.list(req);
+  const session = await requirePermission(req, "employee:read");
+  return controller.list(req, session.role === "MASTER_ADMIN" ? undefined : session.tenantId);
 });
 
 export const POST = withApiGuard(async (req: NextRequest) => {
   const session = await requirePermission(req, "employee:manage");
   const payload = parseBody(employeeCreateSchema, await req.json());
 
-  const employee = await service.create({ ...payload, skills: payload.skills ?? [] });
+  const employee = await service.create({ ...payload, tenantId: session.role === "MASTER_ADMIN" ? undefined : session.tenantId, skills: payload.skills ?? [] });
 
   await writeAuditLog({ userId: session.sub, action: "CREATE", module: "EMPLOYEE", entityId: employee.id });
   return success(employee, undefined, 201);

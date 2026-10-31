@@ -38,10 +38,10 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     key: "attendance-monthly",
-    title: "Monthly Attendance Summary",
-    group: "Attendance Reports",
-    description: "Attendance totals by employee for the selected month.",
-    columns: ["Employee", "Present", "Absent", "On Leave", "Late Minutes"],
+    title: "Monthly Timesheet Summary",
+    group: "Timesheet Reports",
+    description: "Timesheet hours and approval status by employee for the selected month.",
+    columns: ["Employee", "Pending Hours", "Approved Hours", "Rejected Hours", "Total Hours"],
     filters: ["month", "year"],
     exportable: true
   },

@@ -7,14 +7,14 @@ import { PayrollService } from "@backend/services/payroll.service";
 const service = new PayrollService();
 
 export const GET = withApiGuard(async (req: NextRequest) => {
-  await requirePermission(req, "payroll:manage");
-  const runs = await service.listRuns();
+  const session = await requirePermission(req, "payroll:manage");
+  const runs = await service.listRuns(session.tenantId);
   return success(runs);
 });
 
 export const POST = withApiGuard(async (req: NextRequest) => {
   const session = await requirePermission(req, "payroll:manage");
   const { month, year } = await req.json();
-  const run = await service.runPayroll({ month: Number(month), year: Number(year), actorUserId: session.sub });
+  const run = await service.runPayroll({ month: Number(month), year: Number(year), actorUserId: session.sub, tenantId: session.tenantId });
   return success(run, undefined, 201);
 });

@@ -8,6 +8,6 @@ const service = new PayrollService();
 
 export const GET = withApiGuard(async (req: NextRequest) => {
   const session = await requirePermission(req, "payroll:self");
-  const payslips = await service.selfPayslips(session.sub);
+  const payslips = await service.selfPayslips(session.sub, session.tenantId);
   return success(payslips);
 });

@@ -6,13 +6,14 @@ import { withPermission } from "@/lib/server";
 export async function GET(req: NextRequest) {
   const access = await withPermission(req, "settings:manage");
   if (access.error) return access.error;
+  const tenantWhere = access.session.role === "MASTER_ADMIN" ? {} : { tenantId: access.session.tenantId ?? "__missing_tenant__" };
 
   const [departments, designations, leaveTypes, shifts, workLocations] = await Promise.all([
-    prisma.department.findMany(),
-    prisma.designation.findMany(),
-    prisma.leaveType.findMany(),
+    prisma.department.findMany({ where: tenantWhere }),
+    prisma.designation.findMany({ where: tenantWhere }),
+    prisma.leaveType.findMany({ where: tenantWhere }),
     prisma.shift.findMany(),
-    prisma.workLocation.findMany()
+    prisma.workLocation.findMany({ where: tenantWhere })
   ]);
 
   return ok({ departments, designations, leaveTypes, shifts, workLocations });

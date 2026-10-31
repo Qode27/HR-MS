@@ -9,11 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { Textarea } from "@/components/ui/textarea";
-import { useDemoMode } from "@/lib/demo";
 
 export default function NewEmployeePage() {
   const router = useRouter();
-  const isDemo = useDemoMode();
   const [bootstrap, setBootstrap] = useState<{
     departments: Array<{ id: string; name: string }>;
     designations: Array<{ id: string; name: string }>;
@@ -32,7 +30,12 @@ export default function NewEmployeePage() {
     designationId: "",
     managerId: "",
     workLocationId: "",
+    salaryType: "FIXED",
     salaryMonthly: 50000,
+    baseSalary: 50000,
+    hourlyRate: 0,
+    allowances: 0,
+    deductions: 0,
     skills: "",
     emergencyName: "",
     emergencyPhone: ""
@@ -67,7 +70,7 @@ export default function NewEmployeePage() {
         skills: form.skills ? form.skills.split(",").map((x) => x.trim()) : []
         })
       });
-      toast.success(isDemo ? "Demo mode: action not saved" : "Employee created");
+      toast.success("Employee created");
       router.push("/employees");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create employee");
@@ -100,7 +103,22 @@ export default function NewEmployeePage() {
             <option value="">No location</option>
             {(bootstrap?.locations || []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
-          <Input type="number" placeholder="Salary" value={form.salaryMonthly} onChange={(e) => setForm({ ...form, salaryMonthly: Number(e.target.value) })} required />
+          <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.salaryType} onChange={(e) => setForm({ ...form, salaryType: e.target.value })}>
+            <option value="FIXED">Fixed salary</option>
+            <option value="HOURLY">Hourly salary</option>
+          </select>
+          {form.salaryType === "FIXED" ? (
+            <>
+              <Input type="number" placeholder="Base salary" value={form.baseSalary} onChange={(e) => setForm({ ...form, salaryMonthly: Number(e.target.value), baseSalary: Number(e.target.value) })} required />
+              <Input type="number" placeholder="Allowances" value={form.allowances} onChange={(e) => setForm({ ...form, allowances: Number(e.target.value) })} />
+              <Input type="number" placeholder="Deductions" value={form.deductions} onChange={(e) => setForm({ ...form, deductions: Number(e.target.value) })} />
+            </>
+          ) : (
+            <>
+              <Input type="number" placeholder="Hourly rate" value={form.hourlyRate} onChange={(e) => setForm({ ...form, hourlyRate: Number(e.target.value), salaryMonthly: Number(e.target.value) })} required />
+              <Input type="number" placeholder="Reference monthly salary" value={form.salaryMonthly} onChange={(e) => setForm({ ...form, salaryMonthly: Number(e.target.value) })} required />
+            </>
+          )}
           <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
             <option value="FULL_TIME">Full Time</option>
             <option value="PART_TIME">Part Time</option>
@@ -111,7 +129,7 @@ export default function NewEmployeePage() {
           <Input placeholder="Emergency contact phone" value={form.emergencyPhone} onChange={(e) => setForm({ ...form, emergencyPhone: e.target.value })} />
           <Input className="md:col-span-2" placeholder="Skills (comma separated)" value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} />
           <Textarea className="md:col-span-2" placeholder="Notes for onboarding/profile context" />
-          <Button className="md:col-span-2" disabled={loading}>{loading ? "Creating..." : isDemo ? "Save demo employee" : "Create Employee"}</Button>
+          <Button className="md:col-span-2" disabled={loading}>{loading ? "Creating..." : "Create Employee"}</Button>
         </form>
       </Card>
     </section>

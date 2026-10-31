@@ -15,11 +15,12 @@ const links = [
 
 export default function AtsPage() {
   const jobs = useApi<any[]>("/api/ats/jobs", []);
-  const candidates = useApi<any[]>("/api/ats/candidates", []);
+  const candidates = useApi<{ items: any[]; total: number }>("/api/ats/candidates?limit=100", []);
 
   const openJobs = (jobs.data || []).filter((job) => job.status === "OPEN").length;
-  const offeredCandidates = (candidates.data || []).filter((candidate) => candidate.stage === "OFFERED").length;
-  const hiredCandidates = (candidates.data || []).filter((candidate) => candidate.stage === "JOINED").length;
+  const candidateRows = candidates.data?.items || [];
+  const offeredCandidates = candidateRows.filter((candidate) => candidate.stage === "OFFERED").length;
+  const hiredCandidates = candidateRows.filter((candidate) => candidate.stage === "JOINED").length;
 
   return (
     <section className="space-y-4">

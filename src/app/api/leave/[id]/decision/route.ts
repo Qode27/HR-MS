@@ -11,7 +11,6 @@ const service = new LeaveService();
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   const session = await requirePermission(req, "leave:approve");
-  const { id } = await params;
   const payload = await req.json();
   if (!["APPROVED", "REJECTED"].includes(payload?.decision)) throw new AppError("Invalid decision", 422);
 
@@ -20,6 +19,7 @@ export const POST = withApiGuard(async (req: NextRequest, { params }: Params) =>
     decision: payload.decision,
     actorUserId: session.sub,
     actorRole: session.role,
+    actorTenantId: session.tenantId,
     note: payload.note
   });
 

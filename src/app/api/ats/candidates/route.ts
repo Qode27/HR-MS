@@ -12,21 +12,25 @@ import { success } from "@backend/utils/api-response";
 const controller = new AtsController();
 
 export const GET = withApiGuard(async (req: NextRequest) => {
-  await requirePermission(req, "ats:manage");
-  return controller.candidates(req);
+  const session = await requirePermission(req, "ats:manage");
+  return controller.candidates(req, session.role === "MASTER_ADMIN" ? undefined : session.tenantId);
 });
 
 export const POST = withApiGuard(async (req: NextRequest) => {
-  await requirePermission(req, "ats:manage");
+  const session = await requirePermission(req, "ats:manage");
   const payload = parseBody(candidateCreateSchema, await req.json());
 
   const hash = crypto.createHash("sha256").update(`${payload.email}:${payload.phone || ""}`).digest("hex");
-  const duplicate = await prisma.candidate.findFirst({ where: { duplicateHash: hash } });
+  const tenantId = session.role === "MASTER_ADMIN" ? null : session.tenantId;
+  const job = await prisma.jobOpening.findFirst({ where: { id: payload.jobOpeningId, tenantId }, select: { id: true } });
+  if (!job) throw new AppError("Job opening not found", 404);
+  const duplicate = await prisma.candidate.findFirst({ where: { duplicateHash: hash, tenantId } });
   if (duplicate) throw new AppError("Duplicate candidate detected", 409);
 
   const candidate = await prisma.candidate.create({
     data: {
       ...payload,
+      tenantId,
       duplicateHash: hash,
       parsedResume: {
         name: payload.fullName,

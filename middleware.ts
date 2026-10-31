@@ -6,18 +6,26 @@ const publicPaths = ["/login", "/forgot-password", "/reset-password", "/careers"
 const authBucket = new Map<string, { hits: number; resetAt: number }>();
 const encoder = new TextEncoder();
 const secret = encoder.encode(process.env.JWT_SECRET || "dev-secret-change-me");
-const demoCookieName = "hrms_demo";
 const routePermissions: Array<{ prefix: string; permissions: string[] }> = [
+  { prefix: "/dashboard", permissions: ["dashboard:read"] },
+  { prefix: "/clients", permissions: ["tenant:read", "tenant:manage"] },
   { prefix: "/employees", permissions: ["employee:read"] },
-  { prefix: "/attendance", permissions: ["attendance:read", "attendance:self"] },
-  { prefix: "/leave", permissions: ["leave:self", "leave:manage", "leave:approve"] },
-  { prefix: "/payroll", permissions: ["payroll:self", "payroll:manage", "payroll:read"] },
+  { prefix: "/timesheets", permissions: ["timesheet:read", "timesheet:approve", "timesheet:self"] },
+  { prefix: "/my-timesheets", permissions: ["timesheet:self"] },
+  { prefix: "/attendance", permissions: ["timesheet:read", "timesheet:self", "timesheet:approve"] },
+  { prefix: "/my-leave", permissions: ["leave:self"] },
+  { prefix: "/team-leave", permissions: ["leave:team"] },
+  { prefix: "/leave/apply", permissions: ["leave:self"] },
+  { prefix: "/leave", permissions: ["leave:manage"] },
+  { prefix: "/payroll/payslips", permissions: ["payroll:self"] },
+  { prefix: "/payroll", permissions: ["payroll:manage", "payroll:read"] },
   { prefix: "/ats", permissions: ["ats:manage"] },
   { prefix: "/onboarding", permissions: ["onboarding:manage"] },
   { prefix: "/performance", permissions: ["employee:read"] },
   { prefix: "/documents", permissions: ["documents:self", "documents:read", "documents:manage"] },
-  { prefix: "/reports", permissions: ["reports:read"] },
-  { prefix: "/settings", permissions: ["settings:manage"] }
+  { prefix: "/reports", permissions: ["reports:read", "subscription:manage"] },
+  { prefix: "/settings", permissions: ["settings:platform", "settings:manage"] },
+  { prefix: "/profile", permissions: ["dashboard:read"] }
 ];
 
 function roleHasPermission(role: string, permission: string) {
@@ -48,7 +56,6 @@ async function resolveSession(accessToken?: string, refreshToken?: string) {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isDemo = req.nextUrl.searchParams.get("demo") === "true" || req.cookies.get(demoCookieName)?.value === "true" || pathname.startsWith("/hrms/demo");
   if (pathname.startsWith("/_next") || pathname.startsWith("/favicon") || pathname.startsWith("/api/public")) {
     return NextResponse.next();
   }
@@ -59,7 +66,7 @@ export async function middleware(req: NextRequest) {
   const session = await resolveSession(accessToken, refreshToken);
   const hasAnySessionToken = Boolean(session);
 
-  if (!hasAnySessionToken && !isPublic && !isDemo && !pathname.startsWith("/api/auth/forgot-password") && !pathname.startsWith("/api/auth/logout")) {
+  if (!hasAnySessionToken && !isPublic && !pathname.startsWith("/api/auth/forgot-password") && !pathname.startsWith("/api/auth/logout")) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ success: false, error: { message: "Unauthorized" } }, { status: 401 });
     }
@@ -69,25 +76,13 @@ export async function middleware(req: NextRequest) {
   if (session && !pathname.startsWith("/api/")) {
     const required = routePermissions.find((route) => pathname === route.prefix || pathname.startsWith(`${route.prefix}/`));
     const role = typeof session.role === "string" ? session.role : undefined;
-    if (required && role && !required.permissions.some((permission) => roleHasPermission(role, permission)) && !isDemo) {
+    if (required && role && !required.permissions.some((permission) => roleHasPermission(role, permission))) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
   }
 
-  if ((hasAnySessionToken || isDemo) && (pathname === "/login" || pathname === "/forgot-password" || pathname === "/reset-password")) {
+  if (hasAnySessionToken && (pathname === "/login" || pathname === "/forgot-password" || pathname === "/reset-password")) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-
-  if (isDemo && pathname.startsWith("/api/")) {
-    const res = NextResponse.next();
-    res.headers.set("X-Frame-Options", "DENY");
-    res.headers.set("X-Content-Type-Options", "nosniff");
-    res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.headers.set(
-      "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none';"
-    );
-    return res;
   }
 
   if (pathname.startsWith("/api/auth/login")) {

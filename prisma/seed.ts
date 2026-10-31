@@ -25,17 +25,62 @@ async function main() {
   await prisma.rolePermission.deleteMany();
   await prisma.permission.deleteMany();
 
-  const roleNames: RoleName[] = ["SUPER_ADMIN", "HR_ADMIN", "RECRUITER", "MANAGER", "EMPLOYEE"];
+  const roleNames: RoleName[] = ["MASTER_ADMIN", "SUPER_ADMIN", "ADMIN", "HR_ADMIN", "RECRUITER", "MANAGER", "EMPLOYEE"];
   for (const role of roleNames) {
     await prisma.role.upsert({ where: { name: role }, update: {}, create: { name: role, description: `${role} role` } });
   }
 
   const permissionMap: Record<RoleName, string[]> = {
-    SUPER_ADMIN: ["*"],
+    MASTER_ADMIN: ["*", "platform:read", "platform:manage", "tenant:read", "tenant:manage", "subscription:manage"],
+    SUPER_ADMIN: [
+      "dashboard:read",
+      "dashboard:company",
+      "employee:read",
+      "employee:manage",
+      "timesheet:read",
+      "timesheet:manage",
+      "timesheet:approve",
+      "leave:self",
+      "leave:manage",
+      "leave:approve",
+      "payroll:self",
+      "payroll:read",
+      "payroll:manage",
+      "onboarding:manage",
+      "ats:manage",
+      "documents:read",
+      "documents:manage",
+      "reports:read",
+      "settings:manage"
+    ],
+    ADMIN: [
+      "dashboard:read",
+      "dashboard:company",
+      "employee:read",
+      "employee:manage",
+      "timesheet:read",
+      "timesheet:manage",
+      "timesheet:approve",
+      "leave:self",
+      "leave:manage",
+      "leave:approve",
+      "payroll:self",
+      "payroll:read",
+      "payroll:manage",
+      "onboarding:manage",
+      "ats:manage",
+      "documents:read",
+      "documents:manage",
+      "reports:read",
+      "settings:manage"
+    ],
     HR_ADMIN: [
       "dashboard:read",
       "employee:read",
       "employee:manage",
+      "timesheet:read",
+      "timesheet:manage",
+      "timesheet:approve",
       "attendance:read",
       "attendance:manage",
       "leave:self",
@@ -48,9 +93,9 @@ async function main() {
       "reports:read",
       "settings:manage"
     ],
-    RECRUITER: ["dashboard:read", "ats:manage", "onboarding:manage", "employee:read", "attendance:read"],
-    MANAGER: ["dashboard:read", "team:read", "leave:approve", "attendance:read", "ats:collaborate", "employee:read"],
-    EMPLOYEE: ["dashboard:read", "self:read", "self:update", "attendance:self", "leave:self", "payroll:self"]
+    RECRUITER: ["dashboard:read", "ats:manage", "onboarding:manage", "employee:read", "timesheet:read", "attendance:read"],
+    MANAGER: ["dashboard:read", "team:read", "leave:approve", "leave:team", "timesheet:read", "timesheet:approve", "attendance:read", "ats:collaborate", "employee:read"],
+    EMPLOYEE: ["dashboard:read", "self:read", "self:update", "timesheet:self", "attendance:self", "leave:self", "payroll:self", "documents:self"]
   };
 
   const allPermissions = Array.from(new Set(Object.values(permissionMap).flat()));
@@ -75,14 +120,55 @@ async function main() {
     }
   }
 
+  const defaultTenant = await prisma.tenant.upsert({
+    where: { id: "tenant_default_peopleflow" },
+    update: {
+      name: "PeopleFlow Client",
+      slug: "peopleflow",
+      legalName: "PeopleFlow Client Pvt Ltd"
+    },
+    create: {
+      id: "tenant_default_peopleflow",
+      name: "PeopleFlow Client",
+      slug: "peopleflow",
+      legalName: "PeopleFlow Client Pvt Ltd",
+      employeeLimit: 1000,
+      monthlyPrice: 49999,
+      status: "ACTIVE"
+    }
+  });
+  const enterprisePlan = await prisma.subscriptionPlan.upsert({
+    where: { name: "Enterprise" },
+    update: {},
+    create: {
+      name: "Enterprise",
+      monthlyPrice: 49999,
+      employeeLimit: 1000,
+      features: { ats: true, payroll: true, documents: true, reports: true }
+    }
+  });
+  await prisma.tenantSubscription.upsert({
+    where: { id: "sub_default_peopleflow" },
+    update: {},
+    create: {
+      id: "sub_default_peopleflow",
+      tenantId: defaultTenant.id,
+      planId: enterprisePlan.id,
+      status: "ACTIVE",
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+      mrr: 49999
+    }
+  });
+
   const departments = ["Engineering", "HR", "Finance", "Sales", "Marketing", "Operations", "Support", "Legal", "Design", "IT"];
   for (const [i, name] of departments.entries()) {
-    await prisma.department.upsert({ where: { name }, update: {}, create: { name, code: `DPT${String(i + 1).padStart(2, "0")}` } });
+    await prisma.department.upsert({ where: { name }, update: { tenantId: defaultTenant.id }, create: { tenantId: defaultTenant.id, name, code: `DPT${String(i + 1).padStart(2, "0")}` } });
   }
 
   const designations = ["Software Engineer", "Senior Engineer", "HR Executive", "Payroll Analyst", "Recruiter", "Manager", "Team Lead", "Operations Specialist", "Designer", "Admin Associate"];
   for (const name of designations) {
-    await prisma.designation.upsert({ where: { name }, update: {}, create: { name } });
+    await prisma.designation.upsert({ where: { name }, update: { tenantId: defaultTenant.id }, create: { tenantId: defaultTenant.id, name } });
   }
 
   const locations = [
@@ -91,12 +177,12 @@ async function main() {
     { name: "Delhi", city: "Delhi", country: "India" }
   ];
   for (const loc of locations) {
-    await prisma.workLocation.upsert({ where: { name: loc.name }, update: {}, create: loc });
+    await prisma.workLocation.upsert({ where: { name: loc.name }, update: { tenantId: defaultTenant.id }, create: { ...loc, tenantId: defaultTenant.id } });
   }
 
-  await prisma.leaveType.upsert({ where: { code: "CL" }, update: {}, create: { name: "Casual Leave", code: "CL", annualQuota: 12 } });
-  await prisma.leaveType.upsert({ where: { code: "SL" }, update: {}, create: { name: "Sick Leave", code: "SL", annualQuota: 10 } });
-  await prisma.leaveType.upsert({ where: { code: "EL" }, update: {}, create: { name: "Earned Leave", code: "EL", annualQuota: 15, carryForward: true } });
+  await prisma.leaveType.upsert({ where: { code: "CL" }, update: { tenantId: defaultTenant.id }, create: { tenantId: defaultTenant.id, name: "Casual Leave", code: "CL", annualQuota: 12 } });
+  await prisma.leaveType.upsert({ where: { code: "SL" }, update: { tenantId: defaultTenant.id }, create: { tenantId: defaultTenant.id, name: "Sick Leave", code: "SL", annualQuota: 10 } });
+  await prisma.leaveType.upsert({ where: { code: "EL" }, update: { tenantId: defaultTenant.id }, create: { tenantId: defaultTenant.id, name: "Earned Leave", code: "EL", annualQuota: 15, carryForward: true } });
   await prisma.organizationSetting.upsert({
     where: { key: "company.profile" },
     update: {},
@@ -106,6 +192,7 @@ async function main() {
     }
   });
 
+  const masterRole = await prisma.role.findUniqueOrThrow({ where: { name: "MASTER_ADMIN" } });
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "SUPER_ADMIN" } });
   const hrRole = await prisma.role.findUniqueOrThrow({ where: { name: "HR_ADMIN" } });
   const recruiterRole = await prisma.role.findUniqueOrThrow({ where: { name: "RECRUITER" } });
@@ -113,19 +200,20 @@ async function main() {
   const employeeRole = await prisma.role.findUniqueOrThrow({ where: { name: "EMPLOYEE" } });
 
   const baseUsers = [
-    { email: "admin@peopleflow.local", fullName: "Aarav Admin", roleId: adminRole.id },
-    { email: "hr@peopleflow.local", fullName: "Harini HR", roleId: hrRole.id },
-    { email: "recruiter1@peopleflow.local", fullName: "Riya Recruiter", roleId: recruiterRole.id },
-    { email: "recruiter2@peopleflow.local", fullName: "Kabir Recruiter", roleId: recruiterRole.id },
-    { email: "manager1@peopleflow.local", fullName: "Mohan Manager", roleId: managerRole.id },
-    { email: "manager2@peopleflow.local", fullName: "Nisha Manager", roleId: managerRole.id },
-    { email: "employee@peopleflow.local", fullName: "Esha Employee", roleId: employeeRole.id }
+    { email: "master@peopleflow.local", fullName: "Platform Owner", roleId: masterRole.id, tenantId: null },
+    { email: "admin@peopleflow.local", fullName: "Aarav Admin", roleId: adminRole.id, tenantId: defaultTenant.id },
+    { email: "hr@peopleflow.local", fullName: "Harini HR", roleId: hrRole.id, tenantId: defaultTenant.id },
+    { email: "recruiter1@peopleflow.local", fullName: "Riya Recruiter", roleId: recruiterRole.id, tenantId: defaultTenant.id },
+    { email: "recruiter2@peopleflow.local", fullName: "Kabir Recruiter", roleId: recruiterRole.id, tenantId: defaultTenant.id },
+    { email: "manager1@peopleflow.local", fullName: "Mohan Manager", roleId: managerRole.id, tenantId: defaultTenant.id },
+    { email: "manager2@peopleflow.local", fullName: "Nisha Manager", roleId: managerRole.id, tenantId: defaultTenant.id },
+    { email: "employee@peopleflow.local", fullName: "Esha Employee", roleId: employeeRole.id, tenantId: defaultTenant.id }
   ];
 
   for (const u of baseUsers) {
     await prisma.user.upsert({
       where: { email: u.email },
-      update: { fullName: u.fullName, roleId: u.roleId, passwordHash },
+      update: { fullName: u.fullName, roleId: u.roleId, tenantId: u.tenantId, passwordHash },
       create: { ...u, passwordHash }
     });
   }
@@ -209,7 +297,10 @@ async function main() {
       department: "Engineering",
       designation: "Software Engineer",
       location: "Bengaluru HQ",
-      salaryMonthly: 65000
+      salaryMonthly: 65000,
+      hourlyRate: 500,
+      allowances: 100,
+      deductions: 50
     }
   ] as const;
 
@@ -218,18 +309,29 @@ async function main() {
     const department = departmentByName.get(profile.department) ?? deptRows[0];
     const designation = designationByName.get(profile.designation) ?? desigRows[0];
     const workLocation = locationByName.get(profile.location) ?? locationRows[0];
+    const isHourly = "hourlyRate" in profile;
+    const hourlyRate = isHourly ? Number((profile as { hourlyRate: number }).hourlyRate) : null;
+    const allowances = isHourly ? 0 : "allowances" in profile ? Number((profile as { allowances: number }).allowances) : 0;
+    const deductions = isHourly ? 0 : "deductions" in profile ? Number((profile as { deductions: number }).deductions) : Math.round(profile.salaryMonthly * 0.1);
     const employee = await prisma.employee.upsert({
       where: { userId: user.id },
       update: {
+        tenantId: defaultTenant.id,
         firstName: profile.firstName,
         lastName: profile.lastName,
         employeeCode: profile.employeeCode,
         departmentId: department.id,
         designationId: designation.id,
         workLocationId: workLocation.id,
-        salaryMonthly: profile.salaryMonthly
+        salaryMonthly: profile.salaryMonthly,
+        salaryType: isHourly ? "HOURLY" : "FIXED",
+        baseSalary: isHourly ? 0 : profile.salaryMonthly,
+        hourlyRate,
+        allowances,
+        deductions
       },
       create: {
+        tenantId: defaultTenant.id,
         employeeCode: profile.employeeCode,
         userId: user.id,
         firstName: profile.firstName,
@@ -241,6 +343,11 @@ async function main() {
         designationId: designation.id,
         workLocationId: workLocation.id,
         salaryMonthly: profile.salaryMonthly,
+        salaryType: isHourly ? "HOURLY" : "FIXED",
+        baseSalary: isHourly ? 0 : profile.salaryMonthly,
+        hourlyRate,
+        allowances,
+        deductions,
         skills: ["Communication", "HRMS"]
       }
     });
@@ -260,6 +367,14 @@ async function main() {
     }
   }
 
+  const seededManager = await prisma.employee.findUnique({ where: { employeeCode: "MGR0001" }, select: { id: true } });
+  if (seededManager) {
+    await prisma.employee.update({
+      where: { employeeCode: "EMP0001" },
+      data: { managerId: seededManager.id }
+    });
+  }
+
   const managerUsers = await prisma.user.findMany({ where: { role: { name: { in: ["MANAGER", "HR_ADMIN"] } } } });
   for (let i = 1; i <= 100; i++) {
     const firstName = `Emp${i}`;
@@ -270,8 +385,9 @@ async function main() {
 
     const employee = await prisma.employee.upsert({
       where: { employeeCode: `PF${String(i).padStart(4, "0")}` },
-      update: {},
+      update: { tenantId: defaultTenant.id },
       create: {
+        tenantId: defaultTenant.id,
         employeeCode: `PF${String(i).padStart(4, "0")}`,
         firstName,
         lastName,
@@ -284,6 +400,10 @@ async function main() {
         workLocationId: locationRows[i % locationRows.length].id,
         managerId: undefined,
         salaryMonthly: 35000 + i * 1500,
+        salaryType: "FIXED",
+        baseSalary: 35000 + i * 1500,
+        allowances: 0,
+        deductions: Math.round((35000 + i * 1500) * 0.1),
         skills: ["Communication", "Excel", "HRMS", `Skill${i}`]
       }
     });
@@ -300,6 +420,7 @@ async function main() {
       where: { employeeId_date: { employeeId: employee.id, date: new Date(2026, 2, 9) } },
       update: {},
       create: {
+        tenantId: defaultTenant.id,
         employeeId: employee.id,
         date: new Date(2026, 2, 9),
         checkIn: new Date(2026, 2, 9, 9, 15),
@@ -315,6 +436,7 @@ async function main() {
   for (let i = 1; i <= 5; i++) {
     const req = await prisma.jobRequisition.create({
       data: {
+        tenantId: defaultTenant.id,
         title: `Hiring Requisition ${i}`,
         departmentId: dep.id,
         employmentType: "FULL_TIME",
@@ -332,6 +454,7 @@ async function main() {
   for (let i = 0; i < reqIds.length; i++) {
     const opening = await prisma.jobOpening.create({
       data: {
+        tenantId: defaultTenant.id,
         requisitionId: reqIds[i],
         title: `Software Role ${i + 1}`,
         description: "Build scalable products in a fast-growing SaaS platform.",
@@ -348,33 +471,43 @@ async function main() {
   const stages: CandidateStage[] = ["APPLIED", "SCREENING", "SHORTLISTED", "INTERVIEW_SCHEDULED", "INTERVIEWED", "SELECTED", "OFFERED", "JOINED", "REJECTED", "ON_HOLD"];
   const sources: CandidateSource[] = ["CAREERS_PORTAL", "REFERRAL", "LINKEDIN", "JOB_BOARD", "DIRECT", "AGENCY"];
 
-  for (let i = 1; i <= 20; i++) {
+  const skillPool = ["React", "Node", "TypeScript", "Postgres", "Payroll", "Recruiting", "Analytics", "Java", "Python", "AWS", "Supabase", "Design Systems"];
+  const candidateLocations = ["Bengaluru", "Mumbai", "Pune", "Hyderabad", "Delhi", "Remote"];
+  for (let i = 1; i <= 150; i++) {
+    const stage = stages[i % stages.length];
+    const candidateSkills = [skillPool[i % skillPool.length], skillPool[(i + 3) % skillPool.length], skillPool[(i + 6) % skillPool.length]];
     await prisma.candidate.create({
       data: {
+        tenantId: defaultTenant.id,
         jobOpeningId: openings[i % openings.length],
         fullName: `Candidate ${i}`,
         email: `candidate${i}@mail.com`,
         phone: `800000${String(i).padStart(4, "0")}`,
-        currentLocation: i % 2 === 0 ? "Bengaluru" : "Mumbai",
+        currentLocation: candidateLocations[i % candidateLocations.length],
         noticePeriodDays: 30 + (i % 3) * 15,
         totalExperience: 1 + (i % 8),
-        skills: ["React", "Node", `Skill${i}`],
+        skills: candidateSkills,
         education: "B.Tech",
-        stage: stages[i % stages.length],
+        stage,
+        priority: ["INTERVIEW_SCHEDULED", "INTERVIEWED", "SELECTED", "OFFERED"].includes(stage) ? "HIGH" : stage === "SCREENING" || stage === "SHORTLISTED" || stage === "ON_HOLD" ? "MEDIUM" : "LOW",
         source: sources[i % sources.length],
         rating: (i % 5) + 1,
         assignedRecruiterId: recruiters[i % recruiters.length]?.id,
+        nextAction: stage === "APPLIED" ? "Review resume" : stage === "SCREENING" ? "Call candidate" : stage === "SHORTLISTED" ? "Schedule interview" : stage === "REJECTED" ? "No action needed" : "Awaiting feedback",
+        nextActionDate: ["JOINED", "REJECTED"].includes(stage) ? null : new Date(2026, 4, 10 + (i % 20)),
+        tags: i % 5 === 0 ? ["priority"] : i % 7 === 0 ? ["remote"] : [],
+        resumeText: `${candidateSkills.join(" ")} ${candidateLocations[i % candidateLocations.length]} SaaS product experience candidate ${i}`,
         duplicateHash: `seed-${i}`,
         activity: { create: [{ action: "Application received" }, { action: "Profile reviewed" }] }
       }
     });
   }
 
-  const employees = await prisma.employee.findMany({ take: 10 });
+  const employees = await prisma.employee.findMany({ where: { tenantId: defaultTenant.id }, take: 10 });
   const run = await prisma.payrollRun.upsert({
-    where: { month_year: { month: 2, year: 2026 } },
+    where: { tenantId_month_year: { tenantId: defaultTenant.id, month: 2, year: 2026 } },
     update: { status: "COMPLETED" },
-    create: { month: 2, year: 2026, status: "COMPLETED" }
+    create: { tenantId: defaultTenant.id, month: 2, year: 2026, status: "COMPLETED" }
   });
 
   for (const e of employees) {

@@ -19,20 +19,22 @@ export const GET = withApiGuard(async (_req: NextRequest) => {
   ]);
 
   if (canManage || canReadPayroll) {
-    const data = await service.adminOverview();
+    const data = await service.adminOverview(session.tenantId);
     return success({ role: session.role, canManage: canManage, ...data });
   }
 
   if (canSelf) {
-    const payslips = await service.selfPayslips(session.sub);
+    const payslips = await service.selfPayslips(session.sub, session.tenantId);
     return success({
       role: session.role,
       canManage: false,
       totals: {
         runs: payslips.length,
-        draft: 0,
-        completed: payslips.length,
+        locked: payslips.length,
+        processing: 0,
         net: payslips.reduce((sum, slip) => sum + Number(slip.payrollItem.netPay), 0),
+        gross: payslips.reduce((sum, slip) => sum + Number(slip.payrollItem.grossPay), 0),
+        approvedHours: 0,
         employees: 1
       },
       payslips

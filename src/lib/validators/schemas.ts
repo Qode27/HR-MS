@@ -22,7 +22,15 @@ export const employeeCreateSchema = z.object({
   managerId: z.string().optional(),
   workLocationId: z.string().optional(),
   salaryMonthly: z.number().positive(),
+  salaryType: z.enum(["FIXED", "HOURLY"]).default("FIXED"),
+  baseSalary: z.number().nonnegative().optional(),
+  hourlyRate: z.number().nonnegative().optional(),
+  allowances: z.number().nonnegative().default(0),
+  deductions: z.number().nonnegative().default(0),
   skills: z.array(z.string()).default([])
+}).refine((value) => value.salaryType !== "HOURLY" || Number(value.hourlyRate || 0) > 0, {
+  message: "Hourly rate is required for hourly employees",
+  path: ["hourlyRate"]
 });
 
 export const leaveApplySchema = z.object({
@@ -75,4 +83,34 @@ export const candidateStageSchema = z.object({
     "ON_HOLD"
   ]),
   rejectionReason: z.string().optional()
+});
+
+export const timesheetEntrySchema = z.object({
+  date: z.string(),
+  projectName: z.string().min(2).max(120).optional(),
+  taskDescription: z.string().min(2).max(500).optional(),
+  hoursWorked: z.number().positive().max(24).optional(),
+  project: z.string().min(2).max(120).optional(),
+  task: z.string().min(2).max(500).optional(),
+  hours: z.number().positive().max(24).optional(),
+  notes: z.string().max(1000).optional()
+}).refine((value) => !Number.isNaN(new Date(value.date).getTime()), {
+  message: "A valid work date is required",
+  path: ["date"]
+}).refine((value) => Boolean(value.projectName || value.project), {
+  message: "Project name is required",
+  path: ["projectName"]
+}).refine((value) => Boolean(value.taskDescription || value.task), {
+  message: "Task description is required",
+  path: ["taskDescription"]
+}).refine((value) => Number(value.hoursWorked ?? value.hours) > 0, {
+  message: "Hours worked is required",
+  path: ["hoursWorked"]
+});
+
+export const timesheetDecisionSchema = z.object({
+  id: z.string(),
+  decision: z.enum(["APPROVED", "REJECTED"]),
+  note: z.string().max(400).optional(),
+  comment: z.string().max(400).optional()
 });

@@ -22,5 +22,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "deploy-hrms", "qode27-latest", "qode27-latest2", "qode27-latest3", "qode27-logs", "qode27-logs-2", "qode27-logs-3"]
 }

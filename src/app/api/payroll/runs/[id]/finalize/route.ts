@@ -10,6 +10,6 @@ const service = new PayrollService();
 export const POST = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   const session = await requirePermission(req, "payroll:manage");
-  const run = await service.finalizeRun({ runId: id, actorUserId: session.sub });
+  const run = await service.finalizeRun({ runId: id, actorUserId: session.sub, tenantId: session.tenantId });
   return success(run);
 });

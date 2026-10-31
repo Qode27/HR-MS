@@ -12,14 +12,13 @@ const service = new EmployeeService();
 
 export const GET = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
-  await requirePermission(req, "employee:read");
-  return controller.detail(id);
+  const session = await requirePermission(req, "employee:read");
+  return controller.detail(id, session.role === "MASTER_ADMIN" ? undefined : session.tenantId);
 });
 
 export const PATCH = withApiGuard(async (req: NextRequest, { params }: Params) => {
   const { id } = await params;
   await requirePermission(req, "employee:manage");
-  const { id } = await params;
   const payload = await req.json();
   const updated = await service.update(id, payload);
   return success(updated);

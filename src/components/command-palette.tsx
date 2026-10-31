@@ -3,20 +3,26 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useCommandPaletteStore } from "@/store/command-palette";
+import { useApi } from "@/hooks/use-api";
+import { hasPermission } from "@/lib/rbac";
 
 const items = [
-  ["Dashboard", "/dashboard"],
-  ["Employees", "/employees"],
-  ["Attendance", "/attendance"],
-  ["Leave", "/leave"],
-  ["Payroll", "/payroll"],
-  ["ATS Pipeline", "/ats/candidates/pipeline"],
-  ["Onboarding", "/onboarding"],
-  ["Reports", "/reports"]
+  ["Dashboard", "/dashboard", "dashboard:read"],
+  ["Employees", "/employees", "employee:read"],
+  ["Timesheets", "/timesheets", "timesheet:read"],
+  ["My Timesheets", "/my-timesheets", "timesheet:self"],
+  ["Leave Management", "/leave", "leave:manage"],
+  ["Team Leave", "/team-leave", "leave:team"],
+  ["My Leave", "/my-leave", "leave:self"],
+  ["Payroll", "/payroll", "payroll:manage"],
+  ["ATS Pipeline", "/ats/candidates/pipeline", "ats:manage"],
+  ["Onboarding", "/onboarding", "onboarding:manage"],
+  ["Reports", "/reports", "reports:read"]
 ] as const;
 
 export function CommandPalette() {
   const { open, setOpen } = useCommandPaletteStore();
+  const { data } = useApi<{ role: string }>("/api/auth/me", []);
   const [q, setQ] = useState("");
 
   useEffect(() => {
@@ -31,7 +37,10 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
 
-  const filtered = useMemo(() => items.filter((x) => x[0].toLowerCase().includes(q.toLowerCase())), [q]);
+  const filtered = useMemo(() => {
+    const role = data?.role || "EMPLOYEE";
+    return items.filter((x) => hasPermission(role, x[2]) && x[0].toLowerCase().includes(q.toLowerCase()));
+  }, [data?.role, q]);
 
   if (!open) return null;
   return (
