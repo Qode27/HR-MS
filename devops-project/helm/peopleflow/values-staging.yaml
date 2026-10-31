@@ -1,0 +1,21 @@
+replicaCount: 2
+image:
+  repository: acrpeopleflowstg.azurecr.io/peopleflow-web
+migration:
+  image:
+    repository: acrpeopleflowstg.azurecr.io/peopleflow-migrator
+serviceAccount:
+  workloadIdentityClientId: "<staging workload identity client id>"
+secrets:
+  keyVault:
+    enabled: true
+    name: "<staging key vault name>"
+    tenantId: "<your Entra tenant id>"
+ingress:
+  className: webapprouting.kubernetes.azure.com   # AKS app-routing add-on (managed NGINX)
+  host: peopleflow-staging.example.com
+  tls:
+    - secretName: peopleflow-staging-tls
+      hosts: [peopleflow-staging.example.com]
+networkPolicy:
+  ingressControllerNamespace: app-routing-system

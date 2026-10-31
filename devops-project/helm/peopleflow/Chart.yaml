@@ -1,0 +1,11 @@
+apiVersion: v2
+name: peopleflow
+description: PeopleFlow HR - Next.js HRMS (UI + API) with PostgreSQL
+type: application
+# Chart version - bump when the chart changes (SemVer)
+version: 1.0.0
+# App version - overwritten by the pipeline with the image tag
+appVersion: "1.0.0"
+keywords: [hrms, nextjs, prisma, postgresql]
+maintainers:
+  - name: Platform Team

@@ -1,0 +1,102 @@
+# PeopleFlow HR - infrastructure pipeline (Terraform on Azure)
+#
+#   Validate (fmt, validate, checkov) -> Plan/Apply dev -> Plan/Apply staging -> Plan/Apply prod
+#   Every Apply runs the SAVED plan and waits on the infra-<env> environment approval.
+#
+# Auth: AzureCLI@2 with a workload-identity-federation service connection.
+# addSpnToEnvironment exposes servicePrincipalId / tenantId / idToken, which we
+# hand to the azurerm provider as OIDC env vars - no client secret anywhere.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [devops-project/terraform/**]
+
+pr:
+  branches:
+    include: [main]
+  paths:
+    include: [devops-project/terraform/**]
+
+parameters:
+  - name: environments
+    type: object
+    default:
+      - name: dev
+        serviceConnection: sc-azure-dev
+        after: Validate
+      - name: staging
+        serviceConnection: sc-azure-dev
+        after: Apply_dev
+      - name: prod
+        serviceConnection: sc-azure-prod
+        after: Apply_staging
+
+variables:
+  tfVersion: '1.9.8'
+  tfDir: devops-project/terraform
+
+stages:
+  - stage: Validate
+    jobs:
+      - job: validate
+        pool:
+          vmImage: ubuntu-24.04
+        steps:
+          - script: |
+              set -euo pipefail
+              curl -fsSLo tf.zip https://releases.hashicorp.com/terraform/$(tfVersion)/terraform_$(tfVersion)_linux_amd64.zip
+              sudo unzip -o tf.zip -d /usr/local/bin && terraform version
+            displayName: 'Install Terraform $(tfVersion)'
+          - script: terraform fmt -check -recursive
+            workingDirectory: $(tfDir)
+            displayName: 'terraform fmt -check'
+          - script: |
+              terraform init -backend=false
+              terraform validate
+            workingDirectory: $(tfDir)
+            displayName: 'terraform validate'
+          - script: |
+              docker run --rm -v "$(Build.SourcesDirectory):/src" bridgecrew/checkov:3.2.255 \
+                -d /src/$(tfDir) --config-file /src/devops-project/security/checkov.yaml
+            displayName: 'checkov (IaC policy scan)'
+
+  - ${{ each env in parameters.environments }}:
+      - stage: Plan_${{ env.name }}
+        dependsOn: ${{ env.after }}
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        jobs:
+          - job: plan
+            pool:
+              vmImage: ubuntu-24.04
+            steps:
+              - template: templates/terraform-steps.yml
+                parameters:
+                  serviceConnection: ${{ env.serviceConnection }}
+                  environment: ${{ env.name }}
+                  command: plan
+              - publish: $(tfDir)/${{ env.name }}.tfplan
+                artifact: tfplan-${{ env.name }}
+
+      - stage: Apply_${{ env.name }}
+        dependsOn: Plan_${{ env.name }}
+        jobs:
+          - deployment: apply
+            environment: infra-${{ env.name }}   # approval check lives here
+            pool:
+              vmImage: ubuntu-24.04
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    - checkout: self
+                    - download: current
+                      artifact: tfplan-${{ env.name }}
+                    - script: cp $(Pipeline.Workspace)/tfplan-${{ env.name }}/${{ env.name }}.tfplan $(tfDir)/
+                      displayName: 'Restore saved plan'
+                    - template: templates/terraform-steps.yml
+                      parameters:
+                        serviceConnection: ${{ env.serviceConnection }}
+                        environment: ${{ env.name }}
+                        command: apply

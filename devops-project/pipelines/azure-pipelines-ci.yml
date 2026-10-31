@@ -1,0 +1,134 @@
+# PeopleFlow HR - CLASSROOM pipeline (3-day course, Day 2).
+# Needs NO Azure resources: only a free Azure DevOps organization and the
+# Microsoft-hosted agent. (The full dev -> staging -> prod pipeline with AKS is
+# azure-pipelines.yml - walk through it as "what production looks like".)
+#
+#   Validate (typecheck, tests, secret scan, Dockerfile lint)
+#     -> Build (docker build, trivy scan, SBOM, optional push)
+#       -> Release_Test (manual approval on environment "peopleflow-test",
+#                        renders the Kubernetes release manifest as an artifact)
+#
+# Setup: Pipelines -> New -> Azure Repos Git / GitHub -> Existing YAML ->
+#        /devops-project/pipelines/azure-pipelines-ci.yml
+# Then:  Pipelines -> Environments -> New "peopleflow-test" -> Approvals and checks -> Approvals
+
+name: $(Date:yyyyMMdd).$(Rev:r)
+
+trigger:
+  branches:
+    include: [main]
+pr:
+  branches:
+    include: [main]
+
+parameters:
+  - name: pushImage
+    displayName: 'Push image to Docker Hub (needs service connection sc-dockerhub)'
+    type: boolean
+    default: false
+  - name: dockerHubRepo
+    displayName: 'Docker Hub repository, e.g. yourname/peopleflow-web'
+    type: string
+    default: 'yourname/peopleflow-web'
+
+variables:
+  nodeVersion: '20.x'
+  imageTag: '$(Build.BuildNumber)-$(Build.SourceVersion)'
+  dockerfile: devops-project/docker/Dockerfile
+  chartPath: devops-project/helm/peopleflow
+  npm_config_cache: $(Pipeline.Workspace)/.npm
+
+stages:
+  - stage: Validate
+    jobs:
+      - job: test
+        displayName: 'Typecheck + unit tests'
+        pool: { vmImage: ubuntu-24.04 }
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: $(nodeVersion) }
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              path: $(npm_config_cache)
+          - script: npm ci
+            displayName: 'npm ci'
+          - script: npx prisma generate
+            displayName: 'prisma generate'
+          - script: npx tsc --noEmit
+            displayName: 'TypeScript typecheck'
+          - script: npx vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml
+            displayName: 'Unit tests'
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: test-results/junit.xml
+
+      - job: scan
+        displayName: 'Secret scan + Dockerfile lint'
+        pool: { vmImage: ubuntu-24.04 }
+        steps:
+          - script: |
+              docker run --rm -v "$(Build.SourcesDirectory):/repo" zricethezav/gitleaks:v8.21.2 \
+                dir /repo --config /repo/devops-project/security/.gitleaks.toml --redact -v
+            displayName: 'gitleaks'
+          - script: |
+              docker run --rm -i -v "$(Build.SourcesDirectory)/devops-project/security:/cfg" \
+                hadolint/hadolint:v2.12.0 hadolint --config /cfg/hadolint.yaml - < $(dockerfile)
+            displayName: 'hadolint'
+
+  - stage: Build
+    dependsOn: Validate
+    jobs:
+      - job: image
+        pool: { vmImage: ubuntu-24.04 }
+        steps:
+          - script: |
+              DOCKER_BUILDKIT=1 docker build -f $(dockerfile) --target runner \
+                --build-arg APP_VERSION=$(Build.BuildNumber) --build-arg GIT_SHA=$(Build.SourceVersion) \
+                -t ${{ parameters.dockerHubRepo }}:$(imageTag) .
+            displayName: 'docker build'
+          - script: |
+              docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$(Build.SourcesDirectory)/devops-project/security:/cfg" aquasec/trivy:0.56.2 \
+                image --config /cfg/trivy.yaml --exit-code 0 ${{ parameters.dockerHubRepo }}:$(imageTag)
+            displayName: 'trivy scan (report only in class)'
+          - script: |
+              docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(Build.ArtifactStagingDirectory):/out" \
+                anchore/syft:v1.14.2 ${{ parameters.dockerHubRepo }}:$(imageTag) -o spdx-json=/out/sbom.spdx.json
+            displayName: 'SBOM'
+          - ${{ if eq(parameters.pushImage, true) }}:
+              - task: Docker@2
+                inputs: { command: login, containerRegistry: sc-dockerhub }
+              - script: docker push ${{ parameters.dockerHubRepo }}:$(imageTag)
+                displayName: 'docker push'
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: build-output
+
+  - stage: Release_Test
+    displayName: 'Release -> test (approval)'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: release
+        environment: peopleflow-test        # approval configured on the environment
+        pool: { vmImage: ubuntu-24.04 }
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: HelmInstaller@1
+                  inputs: { helmVersionToInstall: 'v3.16.2' }
+                - script: |
+                    mkdir -p $(Build.ArtifactStagingDirectory)/release
+                    helm lint $(chartPath) -f $(chartPath)/values-local.yaml
+                    helm template peopleflow $(chartPath) -n peopleflow \
+                      -f $(chartPath)/values-local.yaml \
+                      --set image.repository=${{ parameters.dockerHubRepo }} --set image.tag=$(imageTag) \
+                      > $(Build.ArtifactStagingDirectory)/release/peopleflow-$(imageTag).yaml
+                    echo "Release manifest for $(imageTag) is ready (artifact: release-manifest)."
+                  displayName: 'Render release manifest for this exact image tag'
+                - publish: $(Build.ArtifactStagingDirectory)/release
+                  artifact: release-manifest

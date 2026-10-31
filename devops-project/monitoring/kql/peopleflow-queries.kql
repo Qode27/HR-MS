@@ -1,0 +1,59 @@
+// PeopleFlow HR - Log Analytics (Container Insights) queries. Day 13.
+// Open: Azure portal -> Log Analytics workspace log-peopleflow-<env> -> Logs.
+
+// 1. Live tail of the web pods (last 15 min)
+ContainerLogV2
+| where TimeGenerated > ago(15m)
+| where PodNamespace startswith "peopleflow" and ContainerName == "web"
+| project TimeGenerated, PodName, LogLevel, LogMessage
+| order by TimeGenerated desc
+
+// 2. Error count per 5 minutes (same signal as the alert rule)
+ContainerLogV2
+| where TimeGenerated > ago(6h)
+| where PodNamespace startswith "peopleflow" and ContainerName == "web"
+| where LogMessage has_any ("error", "Error", "ERR", "Unhandled")
+| summarize errors = count() by bin(TimeGenerated, 5m)
+| render timechart
+
+// 3. Pod restarts (crash loops, OOMKills)
+KubePodInventory
+| where TimeGenerated > ago(24h)
+| where Namespace startswith "peopleflow"
+| summarize restarts = max(PodRestartCount) by Name, ContainerStatusReason = tostring(ContainerStatusReason)
+| where restarts > 0
+| order by restarts desc
+
+// 4. CPU and memory per web pod (compare with requests/limits in values.yaml)
+Perf
+| where TimeGenerated > ago(1h)
+| where ObjectName == "K8SContainer" and CounterName in ("cpuUsageNanoCores", "memoryWorkingSetBytes")
+| where InstanceName has "peopleflow"
+| summarize value = avg(CounterValue) by bin(TimeGenerated, 5m), CounterName, InstanceName
+| render timechart
+
+// 5. Kubernetes warning events (failed probes, image pull, scheduling)
+KubeEvents
+| where TimeGenerated > ago(6h)
+| where Namespace startswith "peopleflow" and KubeEventType == "Warning"
+| project TimeGenerated, Name, Reason, Message
+| order by TimeGenerated desc
+
+// 6. Ingress traffic: requests and 5xx rate from the app-routing NGINX
+ContainerLogV2
+| where TimeGenerated > ago(1h)
+| where PodNamespace == "app-routing-system"
+| extend status = toint(extract(@'" (\d{3}) ', 1, LogMessage))
+| where isnotnull(status)
+| summarize total = count(), errors_5xx = countif(status >= 500) by bin(TimeGenerated, 5m)
+| extend error_rate_pct = round(100.0 * errors_5xx / total, 2)
+| render timechart
+
+// 7. Slow Postgres queries (> 500 ms, set by Terraform log_min_duration_statement)
+AzureDiagnostics
+| where TimeGenerated > ago(24h)
+| where ResourceProvider == "MICROSOFT.DBFORPOSTGRESQL" and Category == "PostgreSQLLogs"
+| where Message has "duration:"
+| extend ms = todouble(extract(@"duration: ([\d\.]+) ms", 1, Message))
+| top 20 by ms desc
+| project TimeGenerated, ms, Message

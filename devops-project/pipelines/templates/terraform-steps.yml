@@ -1,0 +1,45 @@
+# Terraform init + plan|apply with OIDC auth taken from the service connection.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: environment
+    type: string
+  - name: command
+    type: string
+    values: [plan, apply]
+
+steps:
+  - script: |
+      set -euo pipefail
+      curl -fsSLo tf.zip https://releases.hashicorp.com/terraform/$(tfVersion)/terraform_$(tfVersion)_linux_amd64.zip
+      sudo unzip -o tf.zip -d /usr/local/bin
+    displayName: 'Install Terraform'
+
+  - task: AzureCLI@2
+    displayName: 'terraform ${{ parameters.command }} (${{ parameters.environment }})'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      addSpnToEnvironment: true
+      workingDirectory: $(tfDir)
+      inlineScript: |
+        set -euo pipefail
+        export ARM_CLIENT_ID="$servicePrincipalId"
+        export ARM_TENANT_ID="$tenantId"
+        export ARM_OIDC_TOKEN="$idToken"
+        export ARM_USE_OIDC=true
+        export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+
+        terraform init -input=false -backend-config=environments/${{ parameters.environment }}.backend.hcl
+
+        if [ "${{ parameters.command }}" = "plan" ]; then
+          terraform plan -input=false -lock-timeout=5m \
+            -var-file=environments/${{ parameters.environment }}.tfvars \
+            -out=${{ parameters.environment }}.tfplan
+          terraform show -no-color ${{ parameters.environment }}.tfplan > plan.txt
+          echo "##vso[task.uploadsummary]$(pwd)/plan.txt"
+        else
+          terraform apply -input=false -lock-timeout=5m ${{ parameters.environment }}.tfplan
+          terraform output
+        fi

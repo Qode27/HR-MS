@@ -1,0 +1,7 @@
+# Keep Linux line endings so scripts run in WSL, containers and pipelines
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.tf   text eol=lf
+*.j2   text eol=lf
+Makefile text eol=lf

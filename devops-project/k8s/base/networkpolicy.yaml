@@ -1,0 +1,51 @@
+# Zero-trust networking between tiers (Day 14).
+# 1) Deny all ingress traffic in the namespace by default.
+# 2) Allow the ingress controller -> app on 3000.
+# 3) Allow app + migration job -> database on 5432 (the in-cluster DB in the
+#    local overlay; in Azure the DB is a private Flexible Server in its own subnet).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-web
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: peopleflow-web
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 3000
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-db
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: peopleflow-web
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: peopleflow-migrate
+      ports:
+        - port: 5432
+          protocol: TCP

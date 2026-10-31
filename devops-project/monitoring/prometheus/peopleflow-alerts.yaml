@@ -1,0 +1,68 @@
+# PrometheusRule for clusters running kube-prometheus-stack (or Azure Managed
+# Prometheus). Apply: kubectl apply -f peopleflow-alerts.yaml
+# Metrics come from kube-state-metrics and cAdvisor - the app needs no changes.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: peopleflow-alerts
+  namespace: peopleflow
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: peopleflow.availability
+      rules:
+        - alert: PeopleFlowNoReadyPods
+          expr: sum(kube_deployment_status_replicas_available{namespace=~"peopleflow.*", deployment=~".*-web"}) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PeopleFlow has no ready web pods"
+            runbook: "docs/runbooks/incident-response.md"
+
+        - alert: PeopleFlowReplicasMismatch
+          expr: |
+            kube_deployment_spec_replicas{namespace=~"peopleflow.*", deployment=~".*-web"}
+              != kube_deployment_status_replicas_available{namespace=~"peopleflow.*", deployment=~".*-web"}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.deployment }} has unavailable replicas for 10m"
+
+        - alert: PeopleFlowCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace=~"peopleflow.*"}[15m]) > 3
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.pod }} restarted more than 3 times in 15m"
+
+        - alert: PeopleFlowMigrationFailed
+          expr: kube_job_status_failed{namespace=~"peopleflow.*", job_name=~".*-migrate.*"} > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: "Database migration job {{ $labels.job_name }} failed"
+
+    - name: peopleflow.resources
+      rules:
+        - alert: PeopleFlowHighMemory
+          expr: |
+            max by (pod) (container_memory_working_set_bytes{namespace=~"peopleflow.*", container="web"})
+              / max by (pod) (kube_pod_container_resource_limits{namespace=~"peopleflow.*", container="web", resource="memory"}) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.pod }} is above 90% of its memory limit (OOMKill risk)"
+
+        - alert: PeopleFlowHPAMaxedOut
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace=~"peopleflow.*"}
+              >= kube_horizontalpodautoscaler_spec_max_replicas{namespace=~"peopleflow.*"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "HPA {{ $labels.horizontalpodautoscaler }} is at max replicas - raise the limit or investigate load"

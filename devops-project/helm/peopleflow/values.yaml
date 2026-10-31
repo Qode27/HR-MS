@@ -1,0 +1,127 @@
+# Default values for the peopleflow chart.
+# Environment files (values-dev.yaml, values-staging.yaml, values-prod.yaml)
+# override only what differs. The pipeline sets image.tag at deploy time.
+
+replicaCount: 2
+
+image:
+  repository: acrpeopleflowdev.azurecr.io/peopleflow-web
+  tag: ""                 # defaults to .Chart.AppVersion; pipeline passes the build id
+  pullPolicy: IfNotPresent
+
+migration:
+  enabled: true           # runs `prisma migrate deploy` as a post-install/pre-upgrade hook
+  image:
+    repository: acrpeopleflowdev.azurecr.io/peopleflow-migrator
+    tag: ""
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  # Azure Workload Identity: set clientId to the user-assigned identity
+  # that Terraform created (output `workload_identity_client_id`).
+  workloadIdentityClientId: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# Non-secret configuration -> ConfigMap
+config:
+  NODE_ENV: production
+  NEXT_PUBLIC_APP_NAME: "PeopleFlow HR"
+  PORT: "3000"
+  HOSTNAME: "0.0.0.0"
+
+# Secrets: DATABASE_URL, DIRECT_URL, JWT_SECRET
+secrets:
+  # Name of the Kubernetes Secret the pods read.
+  name: peopleflow-secrets
+  # LOCAL LABS ONLY: let the chart create the Secret from these values.
+  create: false
+  values: {}
+  # Azure: sync the Secret from Key Vault with the Secrets Store CSI driver.
+  keyVault:
+    enabled: false
+    name: ""              # Key Vault name
+    tenantId: ""
+    # Key Vault secret name -> environment variable name
+    objects:
+      database-url: DATABASE_URL
+      direct-url: DIRECT_URL
+      jwt-secret: JWT_SECRET
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  host: peopleflow.localtest.me
+  tls: []
+  #  - secretName: peopleflow-tls
+  #    hosts: [peopleflow.example.com]
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 384Mi
+  limits:
+    memory: 768Mi
+
+probes:
+  startup:
+    path: /api/health
+    periodSeconds: 5
+    failureThreshold: 24
+  liveness:
+    path: /api/health
+    periodSeconds: 15
+    failureThreshold: 3
+  readiness:
+    path: /api/health/readiness
+    periodSeconds: 10
+    failureThreshold: 3
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: ingress-nginx
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+topologySpread:
+  enabled: true
+  topologyKey: topology.kubernetes.io/zone

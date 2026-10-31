@@ -1,0 +1,2 @@
+# One CVE per line, with a reason and an expiry date. Review every sprint.
+# CVE-2024-00000  # not reachable: feature unused. expires 2026-12-31 (owner: platform-team)

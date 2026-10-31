@@ -1,0 +1,17 @@
+# checkov -d devops-project/terraform --config-file devops-project/security/checkov.yaml
+framework:
+  - terraform
+compact: true
+quiet: true
+soft-fail: false
+skip-check:
+  # Accepted for the lab, tracked in docs/SECURITY-FINDINGS.md:
+  - CKV_AZURE_109   # Key Vault firewall default Allow (needs private endpoint + self-hosted agents)
+  - CKV_AZURE_189   # Key Vault public network access
+  - CKV_AZURE_139   # ACR public network access (Basic SKU has no private endpoint)
+  - CKV_AZURE_165   # ACR geo-replication (Premium only)
+  - CKV_AZURE_166   # ACR image quarantine (Premium only)
+  - CKV_AZURE_115   # AKS private cluster (hosted agents need a public API server)
+  - CKV_AZURE_6     # AKS API server authorized IP ranges (hosted agent IPs change)
+  - CKV_AZURE_117   # AKS disk encryption set (customer-managed keys out of scope)
+  - CKV_AZURE_226   # AKS ephemeral OS disks (lab VM size too small)

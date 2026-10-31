@@ -1,0 +1,36 @@
+# Local (kind) environment: base app + an in-cluster PostgreSQL.
+# In Azure the database tier is a managed Flexible Server created by Terraform,
+# and secrets come from Key Vault - see helm/ and terraform/.
+#
+#   kubectl apply -k devops-project/k8s/overlays/local
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: peopleflow
+resources:
+  - ../../base
+  - postgres.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+# LOCAL LAB VALUES ONLY - never put real credentials in Git.
+secretGenerator:
+  - name: postgres-credentials
+    literals:
+      - POSTGRES_USER=peopleflow
+      - POSTGRES_PASSWORD=local-lab-password
+      - POSTGRES_DB=peopleflow_hr
+  - name: peopleflow-secrets
+    literals:
+      - DATABASE_URL=postgresql://peopleflow:local-lab-password@postgres:5432/peopleflow_hr?schema=public
+      - DIRECT_URL=postgresql://peopleflow:local-lab-password@postgres:5432/peopleflow_hr?schema=public
+      - JWT_SECRET=local-lab-jwt-secret-change-me-0123456789
+
+patches:
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: peopleflow-web
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1

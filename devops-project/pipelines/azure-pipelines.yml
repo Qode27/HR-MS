@@ -1,0 +1,233 @@
+# PeopleFlow HR - application CI/CD pipeline (Azure DevOps, multi-stage YAML)
+#
+#   Validate  ->  Build  ->  Deploy_Dev  ->  Deploy_Staging  ->  Deploy_Prod
+#   (PR + main)   (main)     (auto)          (approval)          (approval)
+#
+# Reference / production pipeline. In class use azure-pipelines-ci.yml instead.
+# Prerequisites:
+#   * Service connections:  sc-azure-dev  (non-prod subscription: dev + staging)
+#                           sc-azure-prod (prod subscription)      - both ARM, workload identity federation
+#                           sc-acr-dev    (Docker Registry -> dev ACR, used to push)
+#   * Environments:         peopleflow-dev, peopleflow-staging, peopleflow-prod
+#                           (add "Approvals and checks" on staging and prod)
+#   * Variable group:       peopleflow-common, values from `terraform output` per environment:
+#        acrLoginServerDev, aksResourceGroupDev, aksClusterDev,
+#        acrNameStaging, acrLoginServerStaging, aksResourceGroupStaging, aksClusterStaging,
+#        acrNameProd, acrLoginServerProd, aksResourceGroupProd, aksClusterProd
+#   * Images are built ONCE and promoted (az acr import) dev -> staging -> prod.
+#
+# Pipeline file lives in devops-project/pipelines/, the app is at the repo root.
+
+name: $(Date:yyyyMMdd).$(Rev:r)
+
+trigger:
+  branches:
+    include: [main, release/*]
+  paths:
+    exclude:
+      - devops-project/terraform/**
+      - devops-project/docs/**
+      - '**/*.md'
+
+pr:
+  branches:
+    include: [main]
+
+variables:
+  - group: peopleflow-common
+  - name: nodeVersion
+    value: '20.x'
+  - name: imageWeb
+    value: peopleflow-web
+  - name: imageMigrator
+    value: peopleflow-migrator
+  - name: imageTag
+    value: '$(Build.BuildNumber)-$(Build.SourceVersion)'
+  - name: dockerfile
+    value: devops-project/docker/Dockerfile
+  - name: chartPath
+    value: devops-project/helm/peopleflow
+  - name: npm_config_cache
+    value: $(Pipeline.Workspace)/.npm
+
+stages:
+  # ---------------------------------------------------------------- Validate
+  - stage: Validate
+    displayName: 'Validate (lint, test, scan)'
+    jobs:
+      - job: app
+        displayName: 'Typecheck + unit tests'
+        pool:
+          vmImage: ubuntu-24.04
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(nodeVersion)
+          - task: Cache@2
+            displayName: 'Cache npm'
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              path: $(npm_config_cache)
+          - script: npm ci
+            displayName: 'npm ci'
+          - script: npx prisma generate
+            displayName: 'prisma generate'
+          - script: npx tsc --noEmit
+            displayName: 'TypeScript typecheck'
+          - script: npx vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml
+            displayName: 'Unit tests (vitest)'
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: 'test-results/junit.xml'
+              testRunTitle: 'Unit tests'
+          - script: npm audit --omit=dev --audit-level=high
+            displayName: 'npm audit (high+)'
+            continueOnError: true   # report, do not block (tighten later)
+
+      - job: security
+        displayName: 'Secrets + IaC + Dockerfile scan'
+        pool:
+          vmImage: ubuntu-24.04
+        steps:
+          - script: |
+              docker run --rm -v "$(Build.SourcesDirectory):/repo" zricethezav/gitleaks:v8.21.2 \
+                dir /repo --config /repo/devops-project/security/.gitleaks.toml \
+                --report-format sarif --report-path /repo/gitleaks.sarif --redact
+            displayName: 'gitleaks (fails on any secret in the tree)'
+          - script: |
+              docker run --rm -i -v "$(Build.SourcesDirectory)/devops-project/security:/cfg" \
+                hadolint/hadolint:v2.12.0 hadolint --config /cfg/hadolint.yaml - < $(dockerfile)
+            displayName: 'hadolint Dockerfile'
+          - task: HelmInstaller@1
+            inputs:
+              helmVersionToInstall: 'v3.16.2'
+          - script: |
+              helm lint $(chartPath) -f $(chartPath)/values-dev.yaml
+              helm lint $(chartPath) -f $(chartPath)/values-prod.yaml
+              helm template pf $(chartPath) -f $(chartPath)/values-prod.yaml > /dev/null
+            displayName: 'helm lint + template'
+          - task: PublishBuildArtifacts@1
+            condition: always()
+            inputs:
+              PathtoPublish: gitleaks.sarif
+              ArtifactName: CodeAnalysisLogs
+
+  # ------------------------------------------------------------------- Build
+  - stage: Build
+    displayName: 'Build, scan, push images'
+    dependsOn: Validate
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: images
+        pool:
+          vmImage: ubuntu-24.04
+        steps:
+          - script: |
+              set -euo pipefail
+              export DOCKER_BUILDKIT=1
+              for target in runner migrator; do
+                name=$([ "$target" = runner ] && echo "$(imageWeb)" || echo "$(imageMigrator)")
+                docker build -f $(dockerfile) --target "$target" \
+                  --build-arg APP_VERSION=$(Build.BuildNumber) \
+                  --build-arg GIT_SHA=$(Build.SourceVersion) \
+                  -t "$(acrLoginServerDev)/$name:$(imageTag)" .
+              done
+            displayName: 'docker build (web + migrator)'
+
+          - script: |
+              set -euo pipefail
+              docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$(Build.SourcesDirectory)/devops-project/security:/cfg" \
+                aquasec/trivy:0.56.2 image --config /cfg/trivy.yaml \
+                --exit-code 1 "$(acrLoginServerDev)/$(imageWeb):$(imageTag)"
+            displayName: 'trivy image scan (fail on HIGH/CRITICAL, fixable)'
+
+          - script: |
+              docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$(Build.ArtifactStagingDirectory):/out" anchore/syft:v1.14.2 \
+                "$(acrLoginServerDev)/$(imageWeb):$(imageTag)" -o spdx-json=/out/sbom-web.spdx.json
+            displayName: 'Generate SBOM (syft, SPDX)'
+
+          - task: Docker@2
+            displayName: 'Login to ACR (dev)'
+            inputs:
+              command: login
+              containerRegistry: sc-acr-dev
+          - script: |
+              docker push "$(acrLoginServerDev)/$(imageWeb):$(imageTag)"
+              docker push "$(acrLoginServerDev)/$(imageMigrator):$(imageTag)"
+            displayName: 'docker push'
+
+          - task: HelmInstaller@1
+            inputs:
+              helmVersionToInstall: 'v3.16.2'
+          - script: |
+              helm package $(chartPath) --version 1.0.0+$(Build.BuildId) \
+                --app-version $(imageTag) -d $(Build.ArtifactStagingDirectory)/chart
+              echo "$(imageTag)" > $(Build.ArtifactStagingDirectory)/image-tag.txt
+            displayName: 'helm package'
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: release
+            displayName: 'Publish chart + SBOM'
+
+  # ------------------------------------------------------------- Deployments
+  - stage: Deploy_Dev
+    displayName: 'Deploy -> dev'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - template: templates/deploy-helm.yml
+        parameters:
+          environment: peopleflow-dev
+          azureSubscription: sc-azure-dev
+          resourceGroup: $(aksResourceGroupDev)
+          cluster: $(aksClusterDev)
+          namespace: peopleflow
+          valuesFile: values-dev.yaml
+          imageRegistry: $(acrLoginServerDev)
+          baseUrl: https://peopleflow-dev.example.com
+
+  - stage: Deploy_Staging
+    displayName: 'Deploy -> staging'
+    dependsOn: Deploy_Dev
+    jobs:
+      # Build once, promote: copy the exact image that passed dev into the staging ACR.
+      - template: templates/promote-image.yml
+        parameters:
+          azureSubscription: sc-azure-dev
+          sourceRegistry: $(acrLoginServerDev)
+          targetRegistryName: $(acrNameStaging)
+      - template: templates/deploy-helm.yml
+        parameters:
+          dependsOn: promote
+          environment: peopleflow-staging     # approval check configured on the environment
+          azureSubscription: sc-azure-dev
+          resourceGroup: $(aksResourceGroupStaging)
+          cluster: $(aksClusterStaging)
+          namespace: peopleflow
+          valuesFile: values-staging.yaml
+          imageRegistry: $(acrLoginServerStaging)
+          baseUrl: https://peopleflow-staging.example.com
+
+  - stage: Deploy_Prod
+    displayName: 'Deploy -> prod'
+    dependsOn: Deploy_Staging
+    jobs:
+      - template: templates/promote-image.yml
+        parameters:
+          azureSubscription: sc-azure-prod      # needs AcrPull on the staging registry
+          sourceRegistry: $(acrLoginServerStaging)
+          targetRegistryName: $(acrNameProd)
+      - template: templates/deploy-helm.yml
+        parameters:
+          dependsOn: promote
+          environment: peopleflow-prod
+          azureSubscription: sc-azure-prod
+          resourceGroup: $(aksResourceGroupProd)
+          cluster: $(aksClusterProd)
+          namespace: peopleflow
+          valuesFile: values-prod.yaml
+          imageRegistry: $(acrLoginServerProd)
+          baseUrl: https://peopleflow.example.com

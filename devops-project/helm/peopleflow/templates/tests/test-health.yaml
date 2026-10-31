@@ -1,0 +1,25 @@
+# `helm test <release>` - in-cluster smoke test of the readiness endpoint.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "peopleflow.fullname" . }}-test-health
+  labels:
+    {{- include "peopleflow.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: curl
+      image: curlimages/curl:8.10.1
+      args: ["-fsS", "--max-time", "10", "http://{{ include "peopleflow.fullname" . }}-web:{{ .Values.service.port }}/api/health/readiness"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]

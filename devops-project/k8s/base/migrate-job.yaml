@@ -1,0 +1,52 @@
+# Applies Prisma migrations before (or alongside) a new release.
+# Jobs are immutable: delete the old one before re-applying
+#   kubectl -n peopleflow delete job peopleflow-migrate --ignore-not-found
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: peopleflow-migrate
+  labels:
+    app.kubernetes.io/name: peopleflow-migrate
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: peopleflow-migrate
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: peopleflow
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: peopleflow-migrator:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: peopleflow-config
+            - secretRef:
+                name: peopleflow-secrets
+          env:
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

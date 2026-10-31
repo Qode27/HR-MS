@@ -1,0 +1,74 @@
+# Reusable deployment job: helm upgrade --install into AKS, then smoke test.
+# Used by Deploy_Dev / Deploy_Staging / Deploy_Prod in ../azure-pipelines.yml.
+parameters:
+  - name: environment          # Azure DevOps Environment (holds approvals + history)
+    type: string
+  - name: azureSubscription    # ARM service connection
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: cluster
+    type: string
+  - name: namespace
+    type: string
+  - name: valuesFile
+    type: string
+  - name: imageRegistry
+    type: string
+  - name: baseUrl
+    type: string
+  - name: releaseName
+    type: string
+    default: peopleflow
+  - name: dependsOn
+    type: object
+    default: []
+
+jobs:
+  - deployment: deploy_${{ replace(parameters.environment, '-', '_') }}
+    displayName: 'Helm deploy -> ${{ parameters.environment }}'
+    dependsOn: ${{ parameters.dependsOn }}
+    environment: ${{ parameters.environment }}
+    pool:
+      vmImage: ubuntu-24.04
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+            - task: HelmInstaller@1
+              inputs:
+                helmVersionToInstall: 'v3.16.2'
+            - task: AzureCLI@2
+              displayName: 'helm upgrade --install'
+              inputs:
+                azureSubscription: ${{ parameters.azureSubscription }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  az aks get-credentials -g "${{ parameters.resourceGroup }}" -n "${{ parameters.cluster }}" --overwrite-existing
+                  kubelogin convert-kubeconfig -l azurecli
+
+                  helm upgrade --install "${{ parameters.releaseName }}" $(chartPath) \
+                    --namespace "${{ parameters.namespace }}" --create-namespace \
+                    -f $(chartPath)/${{ parameters.valuesFile }} \
+                    --set image.repository=${{ parameters.imageRegistry }}/$(imageWeb) \
+                    --set image.tag=$(imageTag) \
+                    --set migration.image.repository=${{ parameters.imageRegistry }}/$(imageMigrator) \
+                    --set migration.image.tag=$(imageTag) \
+                    --atomic --wait --timeout 10m --history-max 10
+
+                  helm history "${{ parameters.releaseName }}" -n "${{ parameters.namespace }}" --max 5
+                  kubectl -n "${{ parameters.namespace }}" get deploy,pods,ingress -l app.kubernetes.io/instance=${{ parameters.releaseName }}
+
+            - script: bash devops-project/scripts/smoke-test.sh "${{ parameters.baseUrl }}"
+              displayName: 'Smoke test ${{ parameters.baseUrl }}'
+
+          on:
+            failure:
+              steps:
+                - script: |
+                    echo "##vso[task.logissue type=error]Deploy to ${{ parameters.environment }} failed."
+                    echo "--atomic already rolled the release back. See docs/runbooks/rollback-and-restore.md"
+                  displayName: 'Report failure'

@@ -1,0 +1,23 @@
+# kind cluster: images loaded with `kind load`, DB from k8s/overlays/local.
+# helm upgrade --install peopleflow devops-project/helm/peopleflow \
+#   -n peopleflow --create-namespace -f devops-project/helm/peopleflow/values-local.yaml
+replicaCount: 1
+image:
+  repository: peopleflow-web
+  tag: local
+migration:
+  image:
+    repository: peopleflow-migrator
+    tag: local
+secrets:
+  create: true
+  values:
+    DATABASE_URL: postgresql://peopleflow:local-lab-password@postgres:5432/peopleflow_hr?schema=public
+    DIRECT_URL: postgresql://peopleflow:local-lab-password@postgres:5432/peopleflow_hr?schema=public
+    JWT_SECRET: local-lab-jwt-secret-change-me-0123456789
+autoscaling:
+  enabled: false
+podDisruptionBudget:
+  enabled: false
+topologySpread:
+  enabled: false

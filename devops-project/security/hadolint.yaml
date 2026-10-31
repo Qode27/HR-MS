@@ -1,0 +1,7 @@
+# hadolint --config devops-project/security/hadolint.yaml devops-project/docker/Dockerfile
+failure-threshold: warning
+ignored:
+  - DL3018   # apk add without pinned versions - base image tag is pinned instead
+trustedRegistries:
+  - docker.io
+  - mcr.microsoft.com

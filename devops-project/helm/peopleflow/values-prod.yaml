@@ -1,0 +1,32 @@
+replicaCount: 3
+image:
+  repository: acrpeopleflowprod.azurecr.io/peopleflow-web
+migration:
+  image:
+    repository: acrpeopleflowprod.azurecr.io/peopleflow-migrator
+serviceAccount:
+  workloadIdentityClientId: "<prod workload identity client id>"
+secrets:
+  keyVault:
+    enabled: true
+    name: "<prod key vault name>"
+    tenantId: "<your Entra tenant id>"
+ingress:
+  className: webapprouting.kubernetes.azure.com   # AKS app-routing add-on (managed NGINX)
+  host: peopleflow.example.com
+  tls:
+    - secretName: peopleflow-tls
+      hosts: [peopleflow.example.com]
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 10
+podDisruptionBudget:
+  minAvailable: 2
+networkPolicy:
+  ingressControllerNamespace: app-routing-system

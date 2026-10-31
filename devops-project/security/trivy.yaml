@@ -1,0 +1,12 @@
+# trivy image --config devops-project/security/trivy.yaml <image>
+severity:
+  - HIGH
+  - CRITICAL
+scan:
+  scanners:
+    - vuln
+    - secret
+vulnerability:
+  ignore-unfixed: true      # only fail on things we can actually fix
+exit-code: 1
+ignorefile: /cfg/.trivyignore

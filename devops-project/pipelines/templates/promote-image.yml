@@ -1,0 +1,30 @@
+# Copies the already-scanned images into the next environment's registry.
+# Same digest, no rebuild -> what you tested is exactly what you ship.
+parameters:
+  - name: azureSubscription
+    type: string
+  - name: sourceRegistry        # login server, e.g. acrpeopleflowdev.azurecr.io
+    type: string
+  - name: targetRegistryName    # registry name, e.g. acrpeopleflowstg
+    type: string
+
+jobs:
+  - job: promote
+    displayName: 'Promote images -> ${{ parameters.targetRegistryName }}'
+    pool:
+      vmImage: ubuntu-24.04
+    steps:
+      - checkout: none
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: ${{ parameters.azureSubscription }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+            for img in $(imageWeb) $(imageMigrator); do
+              az acr import --name "${{ parameters.targetRegistryName }}" --force \
+                --source "${{ parameters.sourceRegistry }}/$img:$(imageTag)" \
+                --image "$img:$(imageTag)"
+              az acr repository show --name "${{ parameters.targetRegistryName }}" --image "$img:$(imageTag)" --query digest -o tsv
+            done

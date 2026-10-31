@@ -1,0 +1,23 @@
+replicaCount: 1
+image:
+  repository: acrpeopleflowdev.azurecr.io/peopleflow-web
+migration:
+  image:
+    repository: acrpeopleflowdev.azurecr.io/peopleflow-migrator
+serviceAccount:
+  workloadIdentityClientId: "<terraform output workload_identity_client_id>"
+secrets:
+  keyVault:
+    enabled: true
+    name: "<terraform output key_vault_name>"
+    tenantId: "<your Entra tenant id>"
+ingress:
+  className: webapprouting.kubernetes.azure.com   # AKS app-routing add-on (managed NGINX)
+  host: peopleflow-dev.example.com
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 3
+podDisruptionBudget:
+  enabled: false
+networkPolicy:
+  ingressControllerNamespace: app-routing-system

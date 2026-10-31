@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: peopleflow-web
+  labels:
+    app.kubernetes.io/name: peopleflow-web
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: peopleflow-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

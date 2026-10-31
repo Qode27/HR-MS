@@ -1,0 +1,14 @@
+PeopleFlow HR {{ default .Chart.AppVersion .Values.image.tag }} is deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+{{- if .Values.ingress.enabled }}
+URL: http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}
+{{- end }}
+
+Check it:
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "peopleflow.fullname" . }}-web
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+Roll back:
+  helm history {{ .Release.Name }} -n {{ .Release.Namespace }}
+  helm rollback {{ .Release.Name }} <REVISION> -n {{ .Release.Namespace }} --wait
